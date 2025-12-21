@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AppState, DEFAULT_APP_STATE } from '@/types/cocktail';
-import { getAppState, updateWithRetry, isConfigured } from '@/lib/jsonbin';
+import { getAppState, updateWithRetry, isConfigured, hasValidCredentials } from '@/lib/jsonbin';
+import { getPopularCocktails } from '@/lib/cocktaildb';
 import { toast } from '@/hooks/use-toast';
 
 interface UseAppStateReturn {
@@ -8,6 +9,7 @@ interface UseAppStateReturn {
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
+  isDemoMode: boolean;
   refresh: () => Promise<void>;
   toggleVote: (userId: string, cocktailId: string) => Promise<void>;
   updateShortlist: (shortlist: string[]) => Promise<void>;
@@ -22,27 +24,47 @@ export function useAppState(): UseAppStateReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   
   const refresh = useCallback(async () => {
-    if (!isConfigured()) {
-      setError('JSONBin not configured. Add ?bin=YOUR_BIN_ID&access=YOUR_ACCESS_KEY to the URL.');
-      setIsLoading(false);
-      return;
+    setIsRefreshing(true);
+    
+    // If JSONBin is configured, try to fetch from there
+    if (hasValidCredentials()) {
+      try {
+        const data = await getAppState();
+        setState(data);
+        setError(null);
+        setIsDemoMode(false);
+      } catch (err) {
+        console.error('Failed to load from JSONBin:', err);
+        // Fall back to demo mode
+        await loadDemoMode();
+      }
+    } else {
+      // No credentials - use demo mode
+      await loadDemoMode();
     }
     
-    setIsRefreshing(true);
+    setIsLoading(false);
+    setIsRefreshing(false);
+  }, []);
+  
+  const loadDemoMode = async () => {
     try {
-      const data = await getAppState();
-      setState(data);
+      const popularCocktails = await getPopularCocktails();
+      const shortlist = popularCocktails.map(c => c.id);
+      setState({
+        ...DEFAULT_APP_STATE,
+        shortlist,
+      });
+      setIsDemoMode(true);
       setError(null);
     } catch (err) {
-      setError('Failed to load data');
+      setError('Failed to load cocktails');
       console.error(err);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
     }
-  }, []);
+  };
   
   useEffect(() => {
     refresh();
@@ -65,6 +87,15 @@ export function useAppState(): UseAppStateReturn {
         [userId]: newVotes,
       },
     }));
+    
+    // If in demo mode, just show toast and keep local state
+    if (!hasValidCredentials()) {
+      toast({
+        title: hasVoted ? 'Vote removed (demo)' : 'Vote added! (demo)',
+        description: 'Add JSONBin credentials to save permanently',
+      });
+      return;
+    }
     
     try {
       await updateWithRetry(current => ({
@@ -101,6 +132,16 @@ export function useAppState(): UseAppStateReturn {
     
     setState(prev => ({ ...prev, shortlist }));
     
+    if (!hasValidCredentials()) {
+      toast({
+        title: 'Demo mode',
+        description: 'Add JSONBin credentials to save changes',
+        variant: 'destructive',
+      });
+      setState(prev => ({ ...prev, shortlist: previous }));
+      return;
+    }
+    
     try {
       await updateWithRetry(() => ({ shortlist }));
       toast({
@@ -128,6 +169,16 @@ export function useAppState(): UseAppStateReturn {
       },
     }));
     
+    if (!hasValidCredentials()) {
+      toast({
+        title: 'Demo mode',
+        description: 'Add JSONBin credentials to save changes',
+        variant: 'destructive',
+      });
+      setState(prev => ({ ...prev, tagsByCocktail: previous }));
+      return;
+    }
+    
     try {
       await updateWithRetry(current => ({
         tagsByCocktail: {
@@ -149,6 +200,16 @@ export function useAppState(): UseAppStateReturn {
     const previous = state.config;
     
     setState(prev => ({ ...prev, config }));
+    
+    if (!hasValidCredentials()) {
+      toast({
+        title: 'Demo mode',
+        description: 'Add JSONBin credentials to save changes',
+        variant: 'destructive',
+      });
+      setState(prev => ({ ...prev, config: previous }));
+      return;
+    }
     
     try {
       await updateWithRetry(() => ({ config }));
@@ -186,6 +247,7 @@ export function useAppState(): UseAppStateReturn {
     isLoading,
     isRefreshing,
     error,
+    isDemoMode,
     refresh,
     toggleVote,
     updateShortlist,

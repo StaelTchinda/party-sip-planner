@@ -12,7 +12,11 @@ export function initJsonBin(binId: string, accessKey: string): void {
 }
 
 export function isConfigured(): boolean {
-  return config !== null;
+  return config !== null && config.binId !== 'YOUR_BIN_ID' && config.accessKey !== 'YOUR_ACCESS_KEY';
+}
+
+export function hasValidCredentials(): boolean {
+  return isConfigured();
 }
 
 export async function getAppState(): Promise<AppState> {
