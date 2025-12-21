@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, X, Wine, GlassWater, Filter } from 'lucide-react';
+import { Search, X, Wine, GlassWater, Filter, Plus } from 'lucide-react';
 import { CUSTOM_TAGS } from '@/types/cocktail';
 import { cn } from '@/lib/utils';
 
 export interface FilterState {
   search: string;
+  ingredients: string[];
   alcoholic: 'all' | 'alcoholic' | 'non-alcoholic';
   tags: string[];
 }
@@ -20,6 +21,7 @@ interface FilterBarProps {
 
 export function FilterBar({ filters, onChange, availableTags = CUSTOM_TAGS }: FilterBarProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [ingredientInput, setIngredientInput] = useState('');
   
   const updateFilter = <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
     onChange({ ...filters, [key]: value });
@@ -32,11 +34,30 @@ export function FilterBar({ filters, onChange, availableTags = CUSTOM_TAGS }: Fi
     updateFilter('tags', newTags);
   };
   
-  const clearFilters = () => {
-    onChange({ search: '', alcoholic: 'all', tags: [] });
+  const addIngredient = () => {
+    const trimmed = ingredientInput.trim();
+    if (trimmed && !filters.ingredients.includes(trimmed) && filters.ingredients.length < 5) {
+      updateFilter('ingredients', [...filters.ingredients, trimmed]);
+      setIngredientInput('');
+    }
   };
   
-  const hasActiveFilters = filters.alcoholic !== 'all' || filters.tags.length > 0;
+  const removeIngredient = (ingredient: string) => {
+    updateFilter('ingredients', filters.ingredients.filter(i => i !== ingredient));
+  };
+  
+  const handleIngredientKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addIngredient();
+    }
+  };
+  
+  const clearFilters = () => {
+    onChange({ search: '', ingredients: [], alcoholic: 'all', tags: [] });
+  };
+  
+  const hasActiveFilters = filters.alcoholic !== 'all' || filters.tags.length > 0 || filters.ingredients.length > 0;
   
   return (
     <div className="space-y-3">
@@ -95,6 +116,48 @@ export function FilterBar({ filters, onChange, availableTags = CUSTOM_TAGS }: Fi
               <GlassWater className="w-3 h-3" />
               Non-Alc
             </Button>
+          </div>
+          
+          {/* Ingredients */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Filter by ingredients</p>
+            <div className="flex gap-2 mb-2">
+              <Input
+                type="text"
+                placeholder="Add ingredient (e.g., vodka, lime)"
+                value={ingredientInput}
+                onChange={(e) => setIngredientInput(e.target.value)}
+                onKeyDown={handleIngredientKeyDown}
+                className="flex-1 bg-background"
+                disabled={filters.ingredients.length >= 5}
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={addIngredient}
+                disabled={!ingredientInput.trim() || filters.ingredients.length >= 5}
+              >
+                <Plus className="w-3 h-3" />
+              </Button>
+            </div>
+            {filters.ingredients.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {filters.ingredients.map(ingredient => (
+                  <Badge
+                    key={ingredient}
+                    variant="default"
+                    className="bg-primary text-primary-foreground cursor-pointer"
+                    onClick={() => removeIngredient(ingredient)}
+                  >
+                    {ingredient}
+                    <X className="w-3 h-3 ml-1" />
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {filters.ingredients.length >= 5 && (
+              <p className="text-xs text-muted-foreground mt-1">Maximum 5 ingredients</p>
+            )}
           </div>
           
           {/* Tags */}

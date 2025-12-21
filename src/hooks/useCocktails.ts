@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Cocktail, BASE_SPIRITS } from '@/types/cocktail';
 import { getCocktailsByIds, getCocktailById, findSimilarCocktails, getPopularCocktails } from '@/lib/cocktaildb';
+import { aggregateMeasures, AggregatedMeasure } from '@/lib/utils';
 
 interface UseCocktailsReturn {
   cocktails: Cocktail[];
@@ -72,6 +73,7 @@ interface IngredientStats {
   name: string;
   count: number;
   isSpirit: boolean;
+  aggregatedMeasure: AggregatedMeasure | null;
 }
 
 export function useIngredientStats(cocktails: Cocktail[]): {
@@ -81,8 +83,9 @@ export function useIngredientStats(cocktails: Cocktail[]): {
   totalSpirits: number;
 } {
   return useMemo(() => {
-    const ingredientMap = new Map<string, IngredientStats>();
+    const ingredientMap = new Map<string, { name: string; isSpirit: boolean; measures: (string | null)[] }>();
     
+    // Collect all ingredients and their measures
     for (const cocktail of cocktails) {
       for (const ing of cocktail.ingredients) {
         const normalized = ing.name.toLowerCase().trim();
@@ -92,18 +95,25 @@ export function useIngredientStats(cocktails: Cocktail[]): {
         
         if (ingredientMap.has(normalized)) {
           const existing = ingredientMap.get(normalized)!;
-          existing.count++;
+          existing.measures.push(ing.measure);
         } else {
           ingredientMap.set(normalized, {
             name: ing.name,
-            count: 1,
             isSpirit,
+            measures: [ing.measure],
           });
         }
       }
     }
     
-    const allIngredients = Array.from(ingredientMap.values())
+    // Convert to IngredientStats with aggregated measures
+    const allIngredients: IngredientStats[] = Array.from(ingredientMap.entries())
+      .map(([normalized, data]) => ({
+        name: data.name,
+        count: data.measures.length,
+        isSpirit: data.isSpirit,
+        aggregatedMeasure: aggregateMeasures(data.measures),
+      }))
       .sort((a, b) => b.count - a.count);
     
     const spirits = allIngredients.filter(i => i.isSpirit);

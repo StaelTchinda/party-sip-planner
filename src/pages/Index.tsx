@@ -12,6 +12,13 @@ import { Navigation, Tab } from '@/components/Navigation';
 import { UserNameDialog } from '@/components/UserNameDialog';
 import { Loader2, AlertCircle, PartyPopper, Info } from 'lucide-react';
 import { Cocktail, CUSTOM_TAGS } from '@/types/cocktail';
+import { 
+  searchCocktails, 
+  filterByMultipleIngredients, 
+  getCocktailsByIds,
+  searchCocktailsWithFilters,
+  filterByAlcoholic 
+} from '@/lib/cocktaildb';
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>('cocktails');
@@ -24,11 +31,18 @@ export default function Index() {
     const alcoholic = (params.get('alcoholic') as FilterState['alcoholic']) || 'all';
     const tagsParam = params.get('tags');
     const tags = tagsParam ? tagsParam.split(',').filter(Boolean) : [];
+    const ingredientsParam = params.get('ingredients');
+    const ingredients = ingredientsParam ? ingredientsParam.split(',').filter(Boolean) : [];
     
-    return { search, alcoholic, tags };
+    return { search, ingredients, alcoholic, tags };
   }, []);
   
   const [filters, setFilters] = useState<FilterState>(getInitialFilters);
+  
+  // State for API search results
+  const [apiSearchResults, setApiSearchResults] = useState<Cocktail[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isUsingApiSearch, setIsUsingApiSearch] = useState(false);
   
   const userId = useUserId();
   
@@ -67,7 +81,7 @@ export default function Index() {
   
   const { cocktails, isLoading: isCocktailsLoading, getSimilar } = useCocktails(state.shortlist);
   
-  const isLoading = isStateLoading || isCocktailsLoading;
+  const isLoading = isStateLoading || (isCocktailsLoading && !isUsingApiSearch);
   
   // Check if user has selected a name
   const hasUserName = useMemo(() => {
@@ -109,6 +123,64 @@ export default function Index() {
     return tagsSet.size > 0 ? Array.from(tagsSet) : CUSTOM_TAGS.slice(0, 6);
   }, [state.tagsByCocktail]);
   
+  // API search logic - triggered when search query or ingredients are present
+  useEffect(() => {
+    const hasSearchQuery = filters.search.trim().length > 0;
+    const hasIngredients = filters.ingredients.length > 0;
+    const shouldUseApi = hasSearchQuery || hasIngredients;
+    
+    setIsUsingApiSearch(shouldUseApi);
+    
+    if (!shouldUseApi) {
+      setApiSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    
+    setIsSearching(true);
+    
+    // Debounce API calls
+    const timeoutId = setTimeout(async () => {
+      try {
+        let results: Cocktail[] = [];
+        
+        if (hasSearchQuery && hasIngredients) {
+          // Both name search and ingredient filter
+          const searchResults = await searchCocktails(filters.search);
+          const ingredientIds = await filterByMultipleIngredients(filters.ingredients);
+          const ingredientIdsSet = new Set(ingredientIds);
+          
+          // Intersect: cocktails that match search AND contain all ingredients
+          results = searchResults.filter(c => ingredientIdsSet.has(c.id));
+        } else if (hasSearchQuery) {
+          // Name search only
+          results = await searchCocktails(filters.search);
+        } else if (hasIngredients) {
+          // Ingredient filter only
+          const ingredientIds = await filterByMultipleIngredients(filters.ingredients);
+          results = await getCocktailsByIds(ingredientIds);
+        }
+        
+        // Apply alcoholic filter via API if needed
+        if (filters.alcoholic !== 'all' && results.length > 0) {
+          const alcoholicType = filters.alcoholic === 'alcoholic' ? 'Alcoholic' : 'Non_Alcoholic';
+          const alcoholicIds = await filterByAlcoholic(alcoholicType);
+          const alcoholicIdsSet = new Set(alcoholicIds);
+          results = results.filter(c => alcoholicIdsSet.has(c.id));
+        }
+        
+        setApiSearchResults(results);
+      } catch (error) {
+        console.error('Error performing API search:', error);
+        setApiSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, filters.search ? 500 : 0); // Debounce search by 500ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [filters.search, filters.ingredients.join(','), filters.alcoholic]);
+  
   // Update URL when filters change (debounced for search)
   useEffect(() => {
     // Debounce search updates to URL
@@ -138,6 +210,12 @@ export default function Index() {
         params.delete('tags');
       }
       
+      if (filters.ingredients.length > 0) {
+        params.set('ingredients', filters.ingredients.join(','));
+      } else {
+        params.delete('ingredients');
+      }
+      
       // Ensure endpoint and view are preserved
       if (endpoint) {
         params.set('endpoint', endpoint);
@@ -154,19 +232,21 @@ export default function Index() {
     return () => clearTimeout(timeoutId);
   }, [filters]);
   
-  // Filter cocktails
+  // Filter cocktails - use API results when searching, otherwise use shortlist
   const filteredCocktails = useMemo(() => {
-    return cocktails.filter(c => {
-      // Search filter
-      if (filters.search && !c.name.toLowerCase().includes(filters.search.toLowerCase())) {
-        return false;
+    // Use API search results if we're searching
+    const sourceCocktails = isUsingApiSearch ? apiSearchResults : cocktails;
+    
+    // Apply client-side filters (tags, and alcoholic if not using API search)
+    return sourceCocktails.filter(c => {
+      // Alcoholic filter (only apply client-side if not using API search)
+      // API search already applies alcoholic filter
+      if (!isUsingApiSearch) {
+        if (filters.alcoholic === 'alcoholic' && !c.alcoholic) return false;
+        if (filters.alcoholic === 'non-alcoholic' && c.alcoholic) return false;
       }
       
-      // Alcoholic filter
-      if (filters.alcoholic === 'alcoholic' && !c.alcoholic) return false;
-      if (filters.alcoholic === 'non-alcoholic' && c.alcoholic) return false;
-      
-      // Tags filter
+      // Tags filter (always client-side, as tags are custom)
       if (filters.tags.length > 0) {
         const cocktailTags = state.tagsByCocktail[c.id] || [];
         if (!filters.tags.some(tag => cocktailTags.includes(tag))) {
@@ -176,7 +256,7 @@ export default function Index() {
       
       return true;
     });
-  }, [cocktails, filters, state.tagsByCocktail]);
+  }, [cocktails, apiSearchResults, isUsingApiSearch, filters, state.tagsByCocktail]);
   
   // Get voted cocktails for ingredients dashboard
   const votedCocktails = useMemo(() => {
@@ -185,11 +265,13 @@ export default function Index() {
     return cocktails.filter(c => userVotes.includes(c.id));
   }, [cocktails, state.votesByUser, userId]);
   
-  // Selected cocktail for detail view
+  // Selected cocktail for detail view - check both cocktails and API search results
   const selectedCocktail = useMemo(() => {
     if (!selectedCocktailId) return null;
-    return cocktails.find(c => c.id === selectedCocktailId) || null;
-  }, [selectedCocktailId, cocktails]);
+    return cocktails.find(c => c.id === selectedCocktailId) 
+      || apiSearchResults.find(c => c.id === selectedCocktailId)
+      || null;
+  }, [selectedCocktailId, cocktails, apiSearchResults]);
   
   // Remove blocking configuration screen - app works in demo mode now
   
@@ -265,7 +347,13 @@ export default function Index() {
             </h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            {activeTab === 'cocktails' && `${filteredCocktails.length} cocktails to choose from`}
+            {activeTab === 'cocktails' && (
+              isSearching 
+                ? 'Searching...'
+                : isUsingApiSearch
+                  ? `${filteredCocktails.length} result${filteredCocktails.length !== 1 ? 's' : ''} from database`
+                  : `${filteredCocktails.length} cocktails to choose from`
+            )}
             {activeTab === 'ingredients' && `Shopping list for ${votedCocktails.length} selected cocktails`}
             {activeTab === 'admin' && 'Manage your party menu'}
           </p>
@@ -283,9 +371,18 @@ export default function Index() {
               availableTags={availableTags}
             />
             
-            {filteredCocktails.length === 0 ? (
+            {isSearching ? (
               <div className="text-center py-12 text-muted-foreground">
-                <p>No cocktails match your filters.</p>
+                <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
+                <p>Searching cocktails...</p>
+              </div>
+            ) : filteredCocktails.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>
+                  {isUsingApiSearch 
+                    ? 'No cocktails found matching your search.' 
+                    : 'No cocktails match your filters.'}
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

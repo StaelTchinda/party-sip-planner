@@ -132,6 +132,75 @@ export async function filterByIngredient(ingredient: string): Promise<string[]> 
   }
 }
 
+export async function filterByAlcoholic(alcoholic: 'Alcoholic' | 'Non_Alcoholic'): Promise<string[]> {
+  try {
+    const response = await fetch(`${API_BASE}/filter.php?a=${encodeURIComponent(alcoholic)}`);
+    const data = await response.json();
+    
+    if (data.drinks) {
+      return data.drinks.map((d: { idDrink: string }) => d.idDrink);
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error filtering by alcohol content:', error);
+    return [];
+  }
+}
+
+export async function getCocktailsByIngredientFilter(ingredient: string): Promise<Cocktail[]> {
+  const ids = await filterByIngredient(ingredient);
+  if (ids.length === 0) return [];
+  return getCocktailsByIds(ids);
+}
+
+export async function filterByMultipleIngredients(ingredients: string[]): Promise<string[]> {
+  if (ingredients.length === 0) return [];
+  if (ingredients.length === 1) return filterByIngredient(ingredients[0]);
+  
+  // Get IDs for each ingredient
+  const ingredientIdSets = await Promise.all(
+    ingredients.map(ing => filterByIngredient(ing))
+  );
+  
+  if (ingredientIdSets.length === 0) return [];
+  
+  // Find intersection - cocktails that contain ALL ingredients
+  const intersection = ingredientIdSets.reduce((acc, ids) => {
+    const idsSet = new Set(ids);
+    return acc.filter(id => idsSet.has(id));
+  }, ingredientIdSets[0]);
+  
+  return intersection;
+}
+
+export async function searchCocktailsWithFilters(
+  query: string,
+  alcoholic?: 'Alcoholic' | 'Non_Alcoholic'
+): Promise<Cocktail[]> {
+  if (!query.trim()) return [];
+  
+  try {
+    // First search by name
+    const searchResults = await searchCocktails(query);
+    
+    // If no alcoholic filter, return search results as-is
+    if (!alcoholic) {
+      return searchResults;
+    }
+    
+    // Get IDs of cocktails matching the alcoholic filter
+    const alcoholicIds = await filterByAlcoholic(alcoholic);
+    const alcoholicIdsSet = new Set(alcoholicIds);
+    
+    // Filter search results to only include those that match alcoholic filter
+    return searchResults.filter(c => alcoholicIdsSet.has(c.id));
+  } catch (error) {
+    console.error('Error searching cocktails with filters:', error);
+    return [];
+  }
+}
+
 export function calculateSimilarity(cocktail1: Cocktail, cocktail2: Cocktail): number {
   const ingredients1 = new Set(cocktail1.ingredients.map(i => i.name.toLowerCase()));
   const ingredients2 = new Set(cocktail2.ingredients.map(i => i.name.toLowerCase()));

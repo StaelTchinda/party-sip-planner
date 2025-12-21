@@ -124,6 +124,11 @@ export function IngredientsDashboard({ cocktails, config }: IngredientsDashboard
             >
               {spirit.name}
               <span className="ml-1 opacity-70">×{spirit.count}</span>
+              {spirit.aggregatedMeasure && (
+                <span className="ml-1.5 font-medium">
+                  ({spirit.aggregatedMeasure.display})
+                </span>
+              )}
             </Badge>
           ))}
           {spirits.length === 0 && (
@@ -145,9 +150,16 @@ export function IngredientsDashboard({ cocktails, config }: IngredientsDashboard
               className="flex justify-between items-center py-1.5 px-2 rounded hover:bg-secondary/50"
             >
               <span className="text-sm text-foreground">{ing.name}</span>
-              <Badge variant="secondary" className="text-xs">
-                ×{ing.count}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {ing.aggregatedMeasure && (
+                  <span className="text-xs text-muted-foreground">
+                    {ing.aggregatedMeasure.display}
+                  </span>
+                )}
+                <Badge variant="secondary" className="text-xs">
+                  ×{ing.count}
+                </Badge>
+              </div>
             </div>
           ))}
         </div>
