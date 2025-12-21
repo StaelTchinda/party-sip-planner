@@ -4,16 +4,24 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  base: process.env.VITE_BASE_PATH || '/',
-  server: {
-    host: "::",
-    port: 8080,
-  },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+export default defineConfig(({ mode }) => {
+  // Normalize base path: ensure it starts with / and ends with /
+  const basePath = process.env.VITE_BASE_PATH || '/';
+  const normalizedBase = basePath.startsWith('/') 
+    ? (basePath.endsWith('/') ? basePath : `${basePath}/`)
+    : `/${basePath}${basePath.endsWith('/') ? '' : '/'}`;
+
+  return {
+    base: normalizedBase,
+    server: {
+      host: "::",
+      port: 8080,
     },
-  },
-}));
+    plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
+    },
+  };
+});
