@@ -167,3 +167,27 @@ export function findSimilarCocktails(
 export function clearCache(): void {
   cocktailCache.clear();
 }
+
+// Fetch popular cocktails for demo mode
+export async function getPopularCocktails(): Promise<Cocktail[]> {
+  // Fetch a few popular cocktails by searching common terms
+  const searches = ['margarita', 'mojito', 'martini', 'old fashioned', 'daiquiri'];
+  const allCocktails: Cocktail[] = [];
+  const seenIds = new Set<string>();
+  
+  for (const term of searches) {
+    try {
+      const results = await searchCocktails(term);
+      for (const cocktail of results.slice(0, 4)) {
+        if (!seenIds.has(cocktail.id)) {
+          seenIds.add(cocktail.id);
+          allCocktails.push(cocktail);
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching ${term}:`, error);
+    }
+  }
+  
+  return allCocktails;
+}

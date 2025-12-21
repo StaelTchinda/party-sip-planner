@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { initJsonBin, isConfigured } from '@/lib/jsonbin';
+import { initJsonBin } from '@/lib/jsonbin';
 import { useAppState } from '@/hooks/useAppState';
 import { useCocktails } from '@/hooks/useCocktails';
 import { useUserId } from '@/hooks/useUserId';
@@ -9,7 +9,7 @@ import { FilterBar, FilterState } from '@/components/FilterBar';
 import { IngredientsDashboard } from '@/components/IngredientsDashboard';
 import { AdminPanel } from '@/components/AdminPanel';
 import { Navigation, Tab } from '@/components/Navigation';
-import { Loader2, AlertCircle, PartyPopper } from 'lucide-react';
+import { Loader2, AlertCircle, PartyPopper, Info } from 'lucide-react';
 import { Cocktail, CUSTOM_TAGS } from '@/types/cocktail';
 
 export default function Index() {
@@ -45,6 +45,7 @@ export default function Index() {
     isLoading: isStateLoading,
     isRefreshing,
     error: stateError,
+    isDemoMode,
     refresh,
     toggleVote,
     updateShortlist,
@@ -104,26 +105,7 @@ export default function Index() {
     return cocktails.find(c => c.id === selectedCocktailId) || null;
   }, [selectedCocktailId, cocktails]);
   
-  // Not configured state
-  if (!isConfigured() && !isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="text-center max-w-md">
-          <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
-          <h1 className="font-display text-2xl font-bold mb-2">Configuration Required</h1>
-          <p className="text-muted-foreground mb-4">
-            Add your JSONBin credentials to the URL to get started:
-          </p>
-          <code className="block bg-card p-3 rounded-lg text-sm text-left overflow-x-auto">
-            ?bin=YOUR_BIN_ID&access=YOUR_ACCESS_KEY
-          </code>
-          <p className="text-sm text-muted-foreground mt-4">
-            Optional: Add <code className="text-primary">&view=admin</code> for admin access.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Remove blocking configuration screen - app works in demo mode now
   
   // Loading state
   if (isLoading) {
@@ -168,6 +150,16 @@ export default function Index() {
   
   return (
     <div className="min-h-screen pb-24">
+      {/* Demo mode banner */}
+      {isDemoMode && (
+        <div className="bg-primary/10 border-b border-primary/20 px-4 py-2">
+          <div className="max-w-2xl mx-auto flex items-center gap-2 text-sm text-primary">
+            <Info className="w-4 h-4 flex-shrink-0" />
+            <span>Demo mode - add <code className="bg-primary/20 px-1 rounded">?bin=ID&access=KEY</code> to save votes</span>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-lg border-b border-border">
         <div className="px-4 py-4 max-w-2xl mx-auto">
