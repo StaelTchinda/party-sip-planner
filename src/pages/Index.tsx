@@ -9,6 +9,7 @@ import { FilterBar, FilterState } from '@/components/FilterBar';
 import { IngredientsDashboard } from '@/components/IngredientsDashboard';
 import { AdminPanel } from '@/components/AdminPanel';
 import { Navigation, Tab } from '@/components/Navigation';
+import { UserNameDialog } from '@/components/UserNameDialog';
 import { Loader2, AlertCircle, PartyPopper, Info } from 'lucide-react';
 import { Cocktail, CUSTOM_TAGS } from '@/types/cocktail';
 
@@ -59,6 +60,7 @@ export default function Index() {
     updateShortlist,
     updateTags,
     updateConfig,
+    setUserName,
     hasVoted,
     getVoteCount,
   } = useAppState();
@@ -66,6 +68,37 @@ export default function Index() {
   const { cocktails, isLoading: isCocktailsLoading, getSimilar } = useCocktails(state.shortlist);
   
   const isLoading = isStateLoading || isCocktailsLoading;
+  
+  // Check if user has selected a name
+  const hasUserName = useMemo(() => {
+    return !!userId && !!state.users[userId];
+  }, [userId, state.users]);
+  
+  // State for name dialog
+  const [showNameDialog, setShowNameDialog] = useState(false);
+  
+  // Show name dialog when user hasn't selected a name (after state loads)
+  useEffect(() => {
+    if (!isLoading && userId && !hasUserName) {
+      setShowNameDialog(true);
+    }
+  }, [isLoading, userId, hasUserName]);
+  
+  // Get existing user names for the dialog
+  const existingNames = useMemo(() => {
+    return Object.values(state.users);
+  }, [state.users]);
+  
+  const handleSelectName = useCallback(async (name: string) => {
+    if (userId) {
+      await setUserName(userId, name);
+      setShowNameDialog(false);
+    }
+  }, [userId, setUserName]);
+  
+  const handleSkipName = useCallback(() => {
+    setShowNameDialog(false);
+  }, []);
   
   // Get available tags from data
   const availableTags = useMemo(() => {
@@ -188,16 +221,25 @@ export default function Index() {
   // Detail view
   if (selectedCocktail) {
     return (
-      <CocktailDetail
-        cocktail={selectedCocktail}
-        hasVoted={hasVoted(userId, selectedCocktail.id)}
-        voteCount={getVoteCount(selectedCocktail.id)}
-        customTags={state.tagsByCocktail[selectedCocktail.id]}
-        similarCocktails={getSimilar(selectedCocktail)}
-        onVote={() => toggleVote(userId, selectedCocktail.id)}
-        onBack={() => setSelectedCocktailId(null)}
-        onViewSimilar={(id) => setSelectedCocktailId(id)}
-      />
+      <>
+        <CocktailDetail
+          cocktail={selectedCocktail}
+          hasVoted={hasVoted(userId, selectedCocktail.id)}
+          voteCount={getVoteCount(selectedCocktail.id)}
+          customTags={state.tagsByCocktail[selectedCocktail.id]}
+          similarCocktails={getSimilar(selectedCocktail)}
+          hasUserName={hasUserName}
+          onVote={() => toggleVote(userId, selectedCocktail.id)}
+          onBack={() => setSelectedCocktailId(null)}
+          onViewSimilar={(id) => setSelectedCocktailId(id)}
+        />
+        <UserNameDialog
+          open={showNameDialog}
+          existingNames={existingNames}
+          onSelectName={handleSelectName}
+          onSkip={handleSkipName}
+        />
+      </>
     );
   }
   
@@ -257,6 +299,7 @@ export default function Index() {
                       hasVoted={hasVoted(userId, cocktail.id)}
                       voteCount={getVoteCount(cocktail.id)}
                       customTags={state.tagsByCocktail[cocktail.id]}
+                      hasUserName={hasUserName}
                       onVote={() => toggleVote(userId, cocktail.id)}
                       onView={() => setSelectedCocktailId(cocktail.id)}
                     />
@@ -295,6 +338,14 @@ export default function Index() {
         isAdmin={isAdmin}
         isRefreshing={isRefreshing}
         onRefresh={refresh}
+      />
+      
+      {/* User name dialog */}
+      <UserNameDialog
+        open={showNameDialog}
+        existingNames={existingNames}
+        onSelectName={handleSelectName}
+        onSkip={handleSkipName}
       />
     </div>
   );

@@ -1,6 +1,12 @@
 import { Cocktail } from '@/types/cocktail';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Heart, ArrowLeft, Wine, GlassWater, Martini } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +16,7 @@ interface CocktailDetailProps {
   voteCount: number;
   customTags?: string[];
   similarCocktails?: Cocktail[];
+  hasUserName: boolean;
   onVote: () => void;
   onBack: () => void;
   onViewSimilar?: (id: string) => void;
@@ -21,6 +28,7 @@ export function CocktailDetail({
   voteCount,
   customTags = [],
   similarCocktails = [],
+  hasUserName,
   onVote,
   onBack,
   onViewSimilar,
@@ -84,15 +92,29 @@ export function CocktailDetail({
       {/* Content */}
       <div className="px-4 sm:px-6 space-y-6 mt-4">
         {/* Vote button */}
-        <Button
-          variant={hasVoted ? 'voted' : 'vote'}
-          size="lg"
-          className="w-full"
-          onClick={onVote}
-        >
-          <Heart className={cn("w-5 h-5", hasVoted && "fill-current")} />
-          {hasVoted ? 'Remove Vote' : 'Vote for this Cocktail'}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="w-full">
+                <Button
+                  variant={hasVoted ? 'voted' : 'vote'}
+                  size="lg"
+                  className="w-full"
+                  onClick={onVote}
+                  disabled={!hasUserName}
+                >
+                  <Heart className={cn("w-5 h-5", hasVoted && "fill-current")} />
+                  {hasVoted ? 'Remove Vote' : 'Vote for this Cocktail'}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!hasUserName && (
+              <TooltipContent>
+                <p>Please select your name to vote</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
         
         {/* Custom tags */}
         {customTags.length > 0 && (

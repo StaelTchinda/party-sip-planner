@@ -110,6 +110,7 @@ This app uses [JSONBin.io](https://jsonbin.io/) as a backend service to store vo
   "shortlist": [],
   "votesByUser": {},
   "tagsByCocktail": {},
+  "users": {},
   "config": {
     "maxIngredients": 30,
     "maxLiquors": 3
@@ -148,6 +149,7 @@ This app uses [JSONBin.io](https://jsonbin.io/) as a backend service to store vo
   "shortlist": [],
   "votesByUser": {},
   "tagsByCocktail": {},
+  "users": {},
   "config": {
     "maxIngredients": 30,
     "maxLiquors": 3
@@ -159,7 +161,17 @@ This app uses [JSONBin.io](https://jsonbin.io/) as a backend service to store vo
 - `shortlist`: Array of cocktail IDs (strings) that are available for voting
 - `votesByUser`: Object mapping user IDs to arrays of cocktail IDs they've voted for
 - `tagsByCocktail`: Object mapping cocktail IDs to arrays of custom tags
+- `users`: Object mapping user IDs to user names (e.g., `{"userId1": "Alice", "userId2": "Bob"}`)
 - `config`: Configuration object with `maxIngredients` and `maxLiquors` limits
+
+### User Name Selection
+
+When users first visit the app, they will be prompted to select or enter their name. This name is used to identify them when voting on cocktails:
+
+- Users can **select from existing names** that have been used by other users
+- Users can **enter a new name** if they don't see their name in the list
+- Users can **skip** name selection, but they won't be able to vote on cocktails until they select a name
+- All user names are stored in the `users` field in the JSONBin, mapping each user ID to their chosen name
 
 ### Step 5: Verify It's Working
 
@@ -279,6 +291,9 @@ The app stores this JSON structure in your JSONBin.io bin:
   };
   tagsByCocktail: {                 // Custom tags
     [cocktailId: string]: string[]; // Map of cocktail ID to array of tags
+  };
+  users: {                          // User names
+    [userId: string]: string;       // Map of user ID to user name
   };
   config: {                         // App configuration
     maxIngredients: number;         // Maximum ingredients to show

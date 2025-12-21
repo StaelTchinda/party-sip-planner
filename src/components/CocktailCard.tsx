@@ -1,6 +1,12 @@
 import { Cocktail } from '@/types/cocktail';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Heart, Eye, Wine, GlassWater } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -9,6 +15,7 @@ interface CocktailCardProps {
   hasVoted: boolean;
   voteCount: number;
   customTags?: string[];
+  hasUserName: boolean;
   onVote: () => void;
   onView: () => void;
 }
@@ -18,6 +25,7 @@ export function CocktailCard({
   hasVoted,
   voteCount,
   customTags = [],
+  hasUserName,
   onVote,
   onView,
 }: CocktailCardProps) {
@@ -89,15 +97,29 @@ export function CocktailCard({
         
         {/* Actions */}
         <div className="flex gap-2 pt-1">
-          <Button
-            variant={hasVoted ? 'voted' : 'vote'}
-            size="sm"
-            className="flex-1"
-            onClick={onVote}
-          >
-            <Heart className={cn("w-4 h-4", hasVoted && "fill-current")} />
-            {hasVoted ? 'Voted' : 'Vote'}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex-1">
+                  <Button
+                    variant={hasVoted ? 'voted' : 'vote'}
+                    size="sm"
+                    className="w-full"
+                    onClick={onVote}
+                    disabled={!hasUserName}
+                  >
+                    <Heart className={cn("w-4 h-4", hasVoted && "fill-current")} />
+                    {hasVoted ? 'Voted' : 'Vote'}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!hasUserName && (
+                <TooltipContent>
+                  <p>Please select your name to vote</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <Button
             variant="glass"
             size="sm"

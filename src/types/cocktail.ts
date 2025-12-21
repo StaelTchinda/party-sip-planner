@@ -65,6 +65,7 @@ export interface AppState {
   shortlist: string[];
   votesByUser: Record<string, string[]>;
   tagsByCocktail: Record<string, string[]>;
+  users: Record<string, string>; // userId -> userName mapping
   config: AppConfig;
 }
 
@@ -97,6 +98,7 @@ export const DEFAULT_APP_STATE: AppState = {
   shortlist: [],
   votesByUser: {},
   tagsByCocktail: {},
+  users: {},
   config: DEFAULT_CONFIG,
 };
 

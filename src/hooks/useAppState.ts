@@ -15,6 +15,7 @@ interface UseAppStateReturn {
   updateShortlist: (shortlist: string[]) => Promise<void>;
   updateTags: (cocktailId: string, tags: string[]) => Promise<void>;
   updateConfig: (config: AppState['config']) => Promise<void>;
+  setUserName: (userId: string, userName: string) => Promise<void>;
   hasVoted: (userId: string, cocktailId: string) => boolean;
   getVoteCount: (cocktailId: string) => number;
 }
@@ -73,6 +74,16 @@ export function useAppState(): UseAppStateReturn {
   const toggleVote = useCallback(async (userId: string, cocktailId: string) => {
     if (!userId) return;
     
+    // Prevent voting if user has no name selected
+    if (!state.users[userId]) {
+      toast({
+        title: 'Name required',
+        description: 'Please select or enter your name to vote',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     const currentVotes = state.votesByUser[userId] || [];
     const hasVoted = currentVotes.includes(cocktailId);
     const newVotes = hasVoted
@@ -129,7 +140,7 @@ export function useAppState(): UseAppStateReturn {
         variant: 'destructive',
       });
     }
-  }, [state.votesByUser]);
+  }, [state.votesByUser, state.users]);
   
   const updateShortlist = useCallback(async (shortlist: string[]) => {
     const previous = state.shortlist;
@@ -231,6 +242,56 @@ export function useAppState(): UseAppStateReturn {
     }
   }, [state.config]);
   
+  const setUserName = useCallback(async (userId: string, userName: string) => {
+    if (!userId || !userName.trim()) return;
+    
+    const previous = state.users;
+    
+    // Optimistic update
+    setState(prev => ({
+      ...prev,
+      users: {
+        ...prev.users,
+        [userId]: userName.trim(),
+      },
+    }));
+    
+    // If in demo mode, just show toast and keep local state
+    if (!hasValidCredentials()) {
+      toast({
+        title: 'Name saved (demo)',
+        description: 'Add JSONBin credentials to save permanently',
+      });
+      return;
+    }
+    
+    try {
+      await updateWithRetry(current => ({
+        users: {
+          ...current.users,
+          [userId]: userName.trim(),
+        },
+      }));
+      
+      toast({
+        title: 'Name saved',
+        description: 'Your name has been recorded',
+      });
+    } catch (err) {
+      // Revert on failure
+      setState(prev => ({ ...prev, users: previous }));
+      
+      console.error('Failed to save user name:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      toast({
+        title: 'Error',
+        description: `Failed to save name: ${errorMessage}`,
+        variant: 'destructive',
+      });
+    }
+  }, [state.users]);
+  
   const hasVoted = useCallback((userId: string, cocktailId: string): boolean => {
     if (!userId) return false;
     return (state.votesByUser[userId] || []).includes(cocktailId);
@@ -257,6 +318,7 @@ export function useAppState(): UseAppStateReturn {
     updateShortlist,
     updateTags,
     updateConfig,
+    setUserName,
     hasVoted,
     getVoteCount,
   };
