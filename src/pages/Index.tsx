@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { initJsonBin } from '@/lib/jsonbin';
 import { useAppState } from '@/hooks/useAppState';
 import { useCocktails } from '@/hooks/useCocktails';
@@ -15,11 +15,19 @@ import { Cocktail, CUSTOM_TAGS } from '@/types/cocktail';
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>('cocktails');
   const [selectedCocktailId, setSelectedCocktailId] = useState<string | null>(null);
-  const [filters, setFilters] = useState<FilterState>({
-    search: '',
-    alcoholic: 'all',
-    tags: [],
-  });
+  
+  // Initialize filters from URL params
+  const getInitialFilters = useCallback((): FilterState => {
+    const params = new URLSearchParams(window.location.search);
+    const search = params.get('search') || '';
+    const alcoholic = (params.get('alcoholic') as FilterState['alcoholic']) || 'all';
+    const tagsParam = params.get('tags');
+    const tags = tagsParam ? tagsParam.split(',').filter(Boolean) : [];
+    
+    return { search, alcoholic, tags };
+  }, []);
+  
+  const [filters, setFilters] = useState<FilterState>(getInitialFilters);
   
   const userId = useUserId();
   
@@ -67,6 +75,51 @@ export default function Index() {
     });
     return tagsSet.size > 0 ? Array.from(tagsSet) : CUSTOM_TAGS.slice(0, 6);
   }, [state.tagsByCocktail]);
+  
+  // Update URL when filters change (debounced for search)
+  useEffect(() => {
+    // Debounce search updates to URL
+    const timeoutId = setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      
+      // Preserve endpoint and view params
+      const endpoint = params.get('endpoint');
+      const view = params.get('view');
+      
+      // Update filter params
+      if (filters.search) {
+        params.set('search', filters.search);
+      } else {
+        params.delete('search');
+      }
+      
+      if (filters.alcoholic !== 'all') {
+        params.set('alcoholic', filters.alcoholic);
+      } else {
+        params.delete('alcoholic');
+      }
+      
+      if (filters.tags.length > 0) {
+        params.set('tags', filters.tags.join(','));
+      } else {
+        params.delete('tags');
+      }
+      
+      // Ensure endpoint and view are preserved
+      if (endpoint) {
+        params.set('endpoint', endpoint);
+      }
+      if (view) {
+        params.set('view', view);
+      }
+      
+      // Update URL without page reload
+      const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+      window.history.replaceState({}, '', newUrl);
+    }, filters.search ? 500 : 0); // Debounce search by 500ms, update other filters immediately
+    
+    return () => clearTimeout(timeoutId);
+  }, [filters]);
   
   // Filter cocktails
   const filteredCocktails = useMemo(() => {
@@ -155,7 +208,7 @@ export default function Index() {
         <div className="bg-primary/10 border-b border-primary/20 px-4 py-2">
           <div className="max-w-2xl mx-auto flex items-center gap-2 text-sm text-primary">
             <Info className="w-4 h-4 flex-shrink-0" />
-            <span>Demo mode - add <code className="bg-primary/20 px-1 rounded">?bin=ID&access=KEY</code> to save votes</span>
+            <span>Demo mode - add <code className="bg-primary/20 px-1 rounded">?bin=BIN_ID&access=ACCESS_KEY</code> to save votes</span>
           </div>
         </div>
       )}

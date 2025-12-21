@@ -119,9 +119,13 @@ export function useAppState(): UseAppStateReturn {
         },
       }));
       
+      // Log detailed error for debugging
+      console.error('Failed to save vote:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
       toast({
         title: 'Error',
-        description: 'Failed to save vote. Please try again.',
+        description: `Failed to save vote: ${errorMessage}. Check console for details.`,
         variant: 'destructive',
       });
     }

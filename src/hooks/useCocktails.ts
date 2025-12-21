@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Cocktail, BASE_SPIRITS } from '@/types/cocktail';
-import { getCocktailsByIds, getCocktailById, findSimilarCocktails } from '@/lib/cocktaildb';
+import { getCocktailsByIds, getCocktailById, findSimilarCocktails, getPopularCocktails } from '@/lib/cocktaildb';
 
 interface UseCocktailsReturn {
   cocktails: Cocktail[];
@@ -16,13 +16,25 @@ export function useCocktails(ids: string[]): UseCocktailsReturn {
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
+    setIsLoading(true);
+    
     if (ids.length === 0) {
-      setCocktails([]);
-      setIsLoading(false);
+      // When shortlist is empty, fetch popular cocktails
+      getPopularCocktails()
+        .then(data => {
+          setCocktails(data);
+          setError(null);
+        })
+        .catch(err => {
+          setError('Failed to load cocktails');
+          console.error(err);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
       return;
     }
     
-    setIsLoading(true);
     getCocktailsByIds(ids)
       .then(data => {
         setCocktails(data);
