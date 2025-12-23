@@ -266,12 +266,16 @@ export function useAppState(): UseAppStateReturn {
     }
     
     try {
-      await updateWithRetry(current => ({
+      // Update and get the full state back from server
+      const updatedState = await updateWithRetry(current => ({
         users: {
           ...current.users,
           [userId]: userName.trim(),
         },
       }));
+      
+      // Update the entire state with the server response to ensure votes are synchronized
+      setState(updatedState);
       
       toast({
         title: 'Name saved',

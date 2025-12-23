@@ -10,19 +10,35 @@ import { IngredientsDashboard } from '@/components/IngredientsDashboard';
 import { AdminPanel } from '@/components/AdminPanel';
 import { Navigation, Tab } from '@/components/Navigation';
 import { UserNameDialog } from '@/components/UserNameDialog';
+import { MyArea } from '@/components/MyArea';
+import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, PartyPopper, Info } from 'lucide-react';
 import { Cocktail, CUSTOM_TAGS } from '@/types/cocktail';
 import { 
   searchCocktails, 
   filterByMultipleIngredients, 
   getCocktailsByIds,
-  searchCocktailsWithFilters,
-  filterByAlcoholic 
+  filterByAlcoholic,
+  getCocktailsByLetter,
 } from '@/lib/cocktaildb';
+
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const PAGE_SIZE = 12;
+const getInitialLetter = () => {
+  const params = new URLSearchParams(window.location.search);
+  const letter = params.get('letter');
+  const normalized = letter ? letter.trim().charAt(0).toUpperCase() : 'A';
+  return ALPHABET.includes(normalized) ? normalized : 'A';
+};
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>('cocktails');
   const [selectedCocktailId, setSelectedCocktailId] = useState<string | null>(null);
+  const [activeLetter, setActiveLetter] = useState<string>(getInitialLetter);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [letterCocktails, setLetterCocktails] = useState<Cocktail[]>([]);
+  const [isLetterLoading, setIsLetterLoading] = useState(true);
+  const [votedCocktailDetails, setVotedCocktailDetails] = useState<Cocktail[]>([]);
   
   // Initialize filters from URL params
   const getInitialFilters = useCallback((): FilterState => {
@@ -79,14 +95,19 @@ export default function Index() {
     getVoteCount,
   } = useAppState();
   
-  const { cocktails, isLoading: isCocktailsLoading, getSimilar } = useCocktails(state.shortlist);
+  const { cocktails: shortlistCocktails, getSimilar } = useCocktails(state.shortlist);
   
-  const isLoading = isStateLoading || (isCocktailsLoading && !isUsingApiSearch);
+  const isLoading = isStateLoading || (!isUsingApiSearch && isLetterLoading);
   
   // Check if user has selected a name
   const hasUserName = useMemo(() => {
     return !!userId && !!state.users[userId];
   }, [userId, state.users]);
+  
+  const currentUserName = useMemo(() => {
+    if (!userId) return '';
+    return state.users[userId] || '';
+  }, [state.users, userId]);
   
   // State for name dialog
   const [showNameDialog, setShowNameDialog] = useState(false);
@@ -122,6 +143,35 @@ export default function Index() {
     });
     return tagsSet.size > 0 ? Array.from(tagsSet) : CUSTOM_TAGS.slice(0, 6);
   }, [state.tagsByCocktail]);
+  
+  // Fetch cocktails for the active letter
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLetter = async () => {
+      setIsLetterLoading(true);
+      try {
+        const results = await getCocktailsByLetter(activeLetter);
+        if (!cancelled) {
+          setLetterCocktails(results);
+        }
+      } catch (error) {
+        console.error('Error fetching cocktails by letter:', error);
+        if (!cancelled) {
+          setLetterCocktails([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLetterLoading(false);
+        }
+      }
+    };
+    
+    fetchLetter();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLetter]);
   
   // API search logic - triggered when search query or ingredients are present
   useEffect(() => {
@@ -179,65 +229,70 @@ export default function Index() {
     }, filters.search ? 500 : 0); // Debounce search by 500ms
     
     return () => clearTimeout(timeoutId);
-  }, [filters.search, filters.ingredients.join(','), filters.alcoholic]);
+  }, [filters.search, filters.ingredients, filters.alcoholic]);
   
-  // Update URL when filters change (debounced for search)
+  const updateUrlParams = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    
+    // Preserve endpoint and view params
+    const endpoint = params.get('endpoint');
+    const view = params.get('view');
+    
+    // Update filter params
+    if (filters.search) {
+      params.set('search', filters.search);
+    } else {
+      params.delete('search');
+    }
+    
+    if (filters.alcoholic !== 'all') {
+      params.set('alcoholic', filters.alcoholic);
+    } else {
+      params.delete('alcoholic');
+    }
+    
+    if (filters.tags.length > 0) {
+      params.set('tags', filters.tags.join(','));
+    } else {
+      params.delete('tags');
+    }
+    
+    if (filters.ingredients.length > 0) {
+      params.set('ingredients', filters.ingredients.join(','));
+    } else {
+      params.delete('ingredients');
+    }
+    
+    params.set('letter', activeLetter.toLowerCase());
+    
+    // Ensure endpoint and view are preserved
+    if (endpoint) {
+      params.set('endpoint', endpoint);
+    }
+    if (view) {
+      params.set('view', view);
+    }
+    
+    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [filters, activeLetter]);
+  
   useEffect(() => {
-    // Debounce search updates to URL
-    const timeoutId = setTimeout(() => {
-      const params = new URLSearchParams(window.location.search);
-      
-      // Preserve endpoint and view params
-      const endpoint = params.get('endpoint');
-      const view = params.get('view');
-      
-      // Update filter params
-      if (filters.search) {
-        params.set('search', filters.search);
-      } else {
-        params.delete('search');
-      }
-      
-      if (filters.alcoholic !== 'all') {
-        params.set('alcoholic', filters.alcoholic);
-      } else {
-        params.delete('alcoholic');
-      }
-      
-      if (filters.tags.length > 0) {
-        params.set('tags', filters.tags.join(','));
-      } else {
-        params.delete('tags');
-      }
-      
-      if (filters.ingredients.length > 0) {
-        params.set('ingredients', filters.ingredients.join(','));
-      } else {
-        params.delete('ingredients');
-      }
-      
-      // Ensure endpoint and view are preserved
-      if (endpoint) {
-        params.set('endpoint', endpoint);
-      }
-      if (view) {
-        params.set('view', view);
-      }
-      
-      // Update URL without page reload
-      const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-      window.history.replaceState({}, '', newUrl);
-    }, filters.search ? 500 : 0); // Debounce search by 500ms, update other filters immediately
-    
+    const timeoutId = setTimeout(updateUrlParams, filters.search ? 500 : 0);
     return () => clearTimeout(timeoutId);
-  }, [filters]);
+  }, [filters, updateUrlParams]);
   
-  // Filter cocktails - use API results when searching, otherwise use shortlist
+  useEffect(() => {
+    updateUrlParams();
+  }, [activeLetter, updateUrlParams]);
+  
+  const sourceCocktails = useMemo(
+    () => (isUsingApiSearch ? apiSearchResults : letterCocktails),
+    [isUsingApiSearch, apiSearchResults, letterCocktails],
+  );
+  
+  // Filter cocktails - use API results when searching, otherwise use letter list
   const filteredCocktails = useMemo(() => {
-    // Use API search results if we're searching
-    const sourceCocktails = isUsingApiSearch ? apiSearchResults : cocktails;
-    
-    // Apply client-side filters (tags, and alcoholic if not using API search)
     return sourceCocktails.filter(c => {
       // Alcoholic filter (only apply client-side if not using API search)
       // API search already applies alcoholic filter
@@ -256,22 +311,104 @@ export default function Index() {
       
       return true;
     });
-  }, [cocktails, apiSearchResults, isUsingApiSearch, filters, state.tagsByCocktail]);
+  }, [sourceCocktails, isUsingApiSearch, filters, state.tagsByCocktail]);
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    filters.search,
+    filters.alcoholic,
+    filters.tags,
+    filters.ingredients,
+    isUsingApiSearch,
+    activeLetter,
+  ]);
+  
+  const totalPages = Math.max(1, Math.ceil(filteredCocktails.length / PAGE_SIZE));
+  
+  useEffect(() => {
+    setCurrentPage(prev => Math.min(prev, totalPages));
+  }, [totalPages]);
+  
+  const paginatedCocktails = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredCocktails.slice(start, start + PAGE_SIZE);
+  }, [filteredCocktails, currentPage]);
+  
+  const pageStart = filteredCocktails.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const pageEnd = filteredCocktails.length === 0 
+    ? 0 
+    : Math.min(filteredCocktails.length, currentPage * PAGE_SIZE);
+  
+  // Load voted cocktail details to keep shopping list and MyArea consistent
+  useEffect(() => {
+    let cancelled = false;
+    const loadVotedCocktails = async () => {
+      if (!userId) {
+        setVotedCocktailDetails([]);
+        return;
+      }
+      
+      const votes = state.votesByUser[userId] || [];
+      if (votes.length === 0) {
+        setVotedCocktailDetails([]);
+        return;
+      }
+      
+      const lookup = new Map<string, Cocktail>();
+      [...letterCocktails, ...apiSearchResults, ...shortlistCocktails].forEach(c => lookup.set(c.id, c));
+      
+      const missingIds = votes.filter(id => !lookup.has(id));
+      let fetched: Cocktail[] = [];
+      if (missingIds.length > 0) {
+        fetched = await getCocktailsByIds(missingIds);
+        fetched.forEach(c => lookup.set(c.id, c));
+      }
+      
+      if (cancelled) return;
+      const ordered = votes
+        .map(id => lookup.get(id))
+        .filter((c): c is Cocktail => Boolean(c));
+      setVotedCocktailDetails(ordered);
+    };
+    
+    loadVotedCocktails();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, state.votesByUser, letterCocktails, apiSearchResults, shortlistCocktails]);
   
   // Get voted cocktails for ingredients dashboard
-  const votedCocktails = useMemo(() => {
-    if (!userId) return [];
-    const userVotes = state.votesByUser[userId] || [];
-    return cocktails.filter(c => userVotes.includes(c.id));
-  }, [cocktails, state.votesByUser, userId]);
+  const votedCocktails = useMemo(() => votedCocktailDetails, [votedCocktailDetails]);
   
-  // Selected cocktail for detail view - check both cocktails and API search results
+  const handleEditName = useCallback(() => {
+    setShowNameDialog(true);
+  }, []);
+  
+  const handleToggleVote = useCallback((cocktailId: string) => {
+    toggleVote(userId, cocktailId);
+  }, [toggleVote, userId]);
+  
+  const handleViewCocktail = useCallback((cocktailId: string) => {
+    setSelectedCocktailId(cocktailId);
+  }, []);
+  
+  const handleBrowseCocktails = useCallback(() => {
+    setActiveTab('cocktails');
+  }, []);
+  
+  // Selected cocktail for detail view - look across current lists and saved votes
+  const cocktailLookup = useMemo(() => {
+    const map = new Map<string, Cocktail>();
+    [...sourceCocktails, ...votedCocktailDetails, ...shortlistCocktails].forEach(c => map.set(c.id, c));
+    return map;
+  }, [sourceCocktails, votedCocktailDetails, shortlistCocktails]);
+  
   const selectedCocktail = useMemo(() => {
     if (!selectedCocktailId) return null;
-    return cocktails.find(c => c.id === selectedCocktailId) 
-      || apiSearchResults.find(c => c.id === selectedCocktailId)
-      || null;
-  }, [selectedCocktailId, cocktails, apiSearchResults]);
+    return cocktailLookup.get(selectedCocktailId) || null;
+  }, [selectedCocktailId, cocktailLookup]);
   
   // Remove blocking configuration screen - app works in demo mode now
   
@@ -352,9 +489,10 @@ export default function Index() {
                 ? 'Searching...'
                 : isUsingApiSearch
                   ? `${filteredCocktails.length} result${filteredCocktails.length !== 1 ? 's' : ''} from database`
-                  : `${filteredCocktails.length} cocktails to choose from`
+                  : `${filteredCocktails.length} cocktails starting with "${activeLetter}"`
             )}
             {activeTab === 'ingredients' && `Shopping list for ${votedCocktails.length} selected cocktails`}
+            {activeTab === 'my-area' && `Your profile and ${votedCocktails.length} liked cocktail${votedCocktails.length === 1 ? '' : 's'}`}
             {activeTab === 'admin' && 'Manage your party menu'}
           </p>
         </div>
@@ -371,6 +509,64 @@ export default function Index() {
               availableTags={availableTags}
             />
             
+            <div className="space-y-3 p-3 bg-card rounded-lg border border-border">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Browse alphabetically</p>
+                <span className="text-xs text-muted-foreground">Letter: {activeLetter}</span>
+              </div>
+              <div className="overflow-x-auto -mx-1">
+                <div className="flex items-center gap-1 px-1 pb-1">
+                  {ALPHABET.map(letter => {
+                    const isActive = activeLetter === letter;
+                    return (
+                      <Button
+                        key={letter}
+                        size="sm"
+                        variant={isActive ? 'default' : 'ghost'}
+                        onClick={() => {
+                          setActiveLetter(letter);
+                          setCurrentPage(1);
+                          setSelectedCocktailId(null);
+                        }}
+                      >
+                        {letter}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-muted-foreground">
+                <span>
+                  {filteredCocktails.length === 0
+                    ? `No cocktails for "${activeLetter}" with the current filters`
+                    : `Showing ${pageStart}-${pageEnd} of ${filteredCocktails.length} for "${activeLetter}"`}
+                </span>
+                {filteredCocktails.length > 0 && totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <span className="px-2 py-1 rounded-md bg-muted text-foreground">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
             {isSearching ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
@@ -381,28 +577,52 @@ export default function Index() {
                 <p>
                   {isUsingApiSearch 
                     ? 'No cocktails found matching your search.' 
-                    : 'No cocktails match your filters.'}
+                    : `No cocktails found for "${activeLetter}".`}
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredCocktails.map((cocktail, idx) => (
-                  <div 
-                    key={cocktail.id}
-                    style={{ animationDelay: `${idx * 50}ms` }}
-                  >
-                    <CocktailCard
-                      cocktail={cocktail}
-                      hasVoted={hasVoted(userId, cocktail.id)}
-                      voteCount={getVoteCount(cocktail.id)}
-                      customTags={state.tagsByCocktail[cocktail.id]}
-                      hasUserName={hasUserName}
-                      onVote={() => toggleVote(userId, cocktail.id)}
-                      onView={() => setSelectedCocktailId(cocktail.id)}
-                    />
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {paginatedCocktails.map((cocktail, idx) => (
+                    <div 
+                      key={cocktail.id}
+                    >
+                      <CocktailCard
+                        cocktail={cocktail}
+                        hasVoted={hasVoted(userId, cocktail.id)}
+                        voteCount={getVoteCount(cocktail.id)}
+                        customTags={state.tagsByCocktail[cocktail.id]}
+                        hasUserName={hasUserName}
+                        onVote={() => toggleVote(userId, cocktail.id)}
+                        onView={() => setSelectedCocktailId(cocktail.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-4 pt-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                    >
+                      Next
+                    </Button>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -415,11 +635,27 @@ export default function Index() {
           />
         )}
         
+        {/* My area tab */}
+        {activeTab === 'my-area' && (
+          <MyArea
+            userName={currentUserName}
+            hasUserName={hasUserName}
+            likedCocktails={votedCocktails}
+            onEditName={handleEditName}
+            onViewCocktail={handleViewCocktail}
+            onToggleVote={handleToggleVote}
+            hasVoted={(cocktailId) => hasVoted(userId, cocktailId)}
+            getVoteCount={getVoteCount}
+            customTagsByCocktail={state.tagsByCocktail}
+            onBrowseCocktails={handleBrowseCocktails}
+          />
+        )}
+        
         {/* Admin tab */}
         {activeTab === 'admin' && isAdmin && (
           <AdminPanel
             state={state}
-            cocktails={cocktails}
+            cocktails={shortlistCocktails}
             onUpdateShortlist={updateShortlist}
             onUpdateTags={updateTags}
             onUpdateConfig={updateConfig}

@@ -114,6 +114,29 @@ export async function searchCocktails(query: string): Promise<Cocktail[]> {
   }
 }
 
+export async function getCocktailsByLetter(letter: string): Promise<Cocktail[]> {
+  const normalized = letter?.trim().charAt(0);
+  if (!normalized) return [];
+  
+  try {
+    const response = await fetch(`${API_BASE}/search.php?f=${encodeURIComponent(normalized)}`);
+    const data = await response.json();
+    
+    if (data.drinks) {
+      const cocktails = data.drinks.map(transformDrink);
+      for (const cocktail of cocktails) {
+        cocktailCache.set(cocktail.id, cocktail);
+      }
+      return cocktails;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching cocktails by letter:', error);
+    return [];
+  }
+}
+
 export async function filterByIngredient(ingredient: string): Promise<string[]> {
   if (!ingredient.trim()) return [];
   
