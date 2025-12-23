@@ -1,24 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
-const USER_ID_KEY = 'cocktail_vote_user_id';
+const USERNAME_KEY = 'cocktail_vote_username';
+const USERNAME_REGEX = /^[a-z0-9_]{3,30}$/;
 
-function generateUserId(): string {
-  return `u_${Date.now().toString(36)}${Math.random().toString(36).substring(2, 9)}`;
+export function isValidUsername(name: string): boolean {
+  return USERNAME_REGEX.test(name.trim());
 }
 
-export function useUserId(): string {
-  const [userId, setUserId] = useState<string>('');
-  
+export function normalizeUsername(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export function useUserName(): [string, (name: string) => void] {
+  const [username, setUsername] = useState<string>('');
+
   useEffect(() => {
-    let storedId = localStorage.getItem(USER_ID_KEY);
-    
-    if (!storedId) {
-      storedId = generateUserId();
-      localStorage.setItem(USER_ID_KEY, storedId);
+    const stored = localStorage.getItem(USERNAME_KEY);
+    if (stored && isValidUsername(stored)) {
+      setUsername(stored);
     }
-    
-    setUserId(storedId);
   }, []);
-  
-  return userId;
+
+  const saveUsername = useCallback((name: string) => {
+    const normalized = normalizeUsername(name);
+    if (!isValidUsername(normalized)) return;
+    localStorage.setItem(USERNAME_KEY, normalized);
+    setUsername(normalized);
+  }, []);
+
+  return [username, saveUsername];
 }

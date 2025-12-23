@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { initJsonBin } from '@/lib/jsonbin';
 import { useAppState } from '@/hooks/useAppState';
 import { useCocktails } from '@/hooks/useCocktails';
-import { useUserId } from '@/hooks/useUserId';
+import { useUserName, isValidUsername, normalizeUsername } from '@/hooks/useUserId';
 import { CocktailCard } from '@/components/CocktailCard';
 import { CocktailDetail } from '@/components/CocktailDetail';
 import { FilterBar, FilterState } from '@/components/FilterBar';
@@ -61,7 +61,7 @@ export default function Index() {
   const [isSearching, setIsSearching] = useState(false);
   const [isUsingApiSearch, setIsUsingApiSearch] = useState(false);
   
-  const userId = useUserId();
+  const [username, setLocalUsername] = useUserName();
   
   // Parse URL params on mount
   useEffect(() => {
@@ -115,41 +115,45 @@ export default function Index() {
     return counts;
   }, [state.votesByUser]);
   
-  const memberCount = useMemo(() => Object.keys(state.users).length, [state.users]);
+  const memberCount = useMemo(() => Object.keys(state.votesByUser).length, [state.votesByUser]);
   
   const isLoading = isStateLoading || (!isUsingApiSearch && isLetterLoading);
   
   // Check if user has selected a name
+  const normalizedUsername = useMemo(() => normalizeUsername(username), [username]);
+  
   const hasUserName = useMemo(() => {
-    return !!userId && !!state.users[userId];
-  }, [userId, state.users]);
+    return !!normalizedUsername && isValidUsername(normalizedUsername);
+  }, [normalizedUsername]);
   
   const currentUserName = useMemo(() => {
-    if (!userId) return '';
-    return state.users[userId] || '';
-  }, [state.users, userId]);
+    return normalizedUsername || '';
+  }, [normalizedUsername]);
   
   // State for name dialog
   const [showNameDialog, setShowNameDialog] = useState(false);
   
   // Show name dialog when user hasn't selected a name (after state loads)
   useEffect(() => {
-    if (!isLoading && userId && !hasUserName) {
+    if (!isLoading && !hasUserName) {
       setShowNameDialog(true);
     }
-  }, [isLoading, userId, hasUserName]);
+  }, [isLoading, hasUserName]);
   
-  // Get existing user names for the dialog
+  // Get existing user names for the dialog - only those who have voted
   const existingNames = useMemo(() => {
-    return Object.values(state.users);
-  }, [state.users]);
+    return Object.keys(state.votesByUser).sort();
+  }, [state.votesByUser]);
   
   const handleSelectName = useCallback(async (name: string) => {
-    if (userId) {
-      await setUserName(userId, name);
-      setShowNameDialog(false);
+    const normalized = normalizeUsername(name);
+    if (!isValidUsername(normalized)) {
+      return;
     }
-  }, [userId, setUserName]);
+    setLocalUsername(normalized);
+    await setUserName(normalized);
+    setShowNameDialog(false);
+  }, [setLocalUsername, setUserName]);
   
   const handleSkipName = useCallback(() => {
     setShowNameDialog(false);
@@ -261,51 +265,51 @@ export default function Index() {
   }, [filters.search, filters.ingredients, filters.alcoholic]);
   
   const updateUrlParams = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    
-    // Preserve endpoint and view params
-    const endpoint = params.get('endpoint');
-    const view = params.get('view');
-    
-    // Update filter params
-    if (filters.search) {
-      params.set('search', filters.search);
-    } else {
-      params.delete('search');
-    }
-    
-    if (filters.alcoholic !== 'all') {
-      params.set('alcoholic', filters.alcoholic);
-    } else {
-      params.delete('alcoholic');
-    }
-    
-    if (filters.tags.length > 0) {
-      params.set('tags', filters.tags.join(','));
-    } else {
-      params.delete('tags');
-    }
-    
-    if (filters.ingredients.length > 0) {
-      params.set('ingredients', filters.ingredients.join(','));
-    } else {
-      params.delete('ingredients');
-    }
+      const params = new URLSearchParams(window.location.search);
+      
+      // Preserve endpoint and view params
+      const endpoint = params.get('endpoint');
+      const view = params.get('view');
+      
+      // Update filter params
+      if (filters.search) {
+        params.set('search', filters.search);
+      } else {
+        params.delete('search');
+      }
+      
+      if (filters.alcoholic !== 'all') {
+        params.set('alcoholic', filters.alcoholic);
+      } else {
+        params.delete('alcoholic');
+      }
+      
+      if (filters.tags.length > 0) {
+        params.set('tags', filters.tags.join(','));
+      } else {
+        params.delete('tags');
+      }
+      
+      if (filters.ingredients.length > 0) {
+        params.set('ingredients', filters.ingredients.join(','));
+      } else {
+        params.delete('ingredients');
+      }
     
     params.set('letter', activeLetter.toLowerCase());
-    
-    // Ensure endpoint and view are preserved
-    if (endpoint) {
-      params.set('endpoint', endpoint);
-    }
-    if (view) {
-      params.set('view', view);
-    }
-    
-    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-    window.history.replaceState({}, '', newUrl);
+      
+      // Ensure endpoint and view are preserved
+      if (endpoint) {
+        params.set('endpoint', endpoint);
+      }
+      if (view) {
+        params.set('view', view);
+      }
+      
+      const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+      window.history.replaceState({}, '', newUrl);
   }, [filters, activeLetter]);
-  
+    
   useEffect(() => {
     const timeoutId = setTimeout(updateUrlParams, filters.search ? 500 : 0);
     return () => clearTimeout(timeoutId);
@@ -373,12 +377,12 @@ export default function Index() {
   useEffect(() => {
     let cancelled = false;
     const loadVotedCocktails = async () => {
-      if (!userId) {
+      if (!normalizedUsername) {
         setVotedCocktailDetails([]);
         return;
       }
       
-      const votes = state.votesByUser[userId] || [];
+      const votes = state.votesByUser[normalizedUsername] || [];
       if (votes.length === 0) {
         setVotedCocktailDetails([]);
         return;
@@ -406,7 +410,7 @@ export default function Index() {
     return () => {
       cancelled = true;
     };
-  }, [userId, state.votesByUser, letterCocktails, apiSearchResults, shortlistCocktails]);
+  }, [normalizedUsername, state.votesByUser, letterCocktails, apiSearchResults, shortlistCocktails]);
   
   // Load all voted cocktails for the Party area
   useEffect(() => {
@@ -458,8 +462,8 @@ export default function Index() {
   }, []);
   
   const handleToggleVote = useCallback((cocktailId: string) => {
-    toggleVote(userId, cocktailId);
-  }, [toggleVote, userId]);
+    toggleVote(normalizedUsername, cocktailId);
+  }, [toggleVote, normalizedUsername]);
   
   const handleViewCocktail = useCallback((cocktailId: string) => {
     setSelectedCocktailId(cocktailId);
@@ -514,12 +518,12 @@ export default function Index() {
       <>
         <CocktailDetail
           cocktail={selectedCocktail}
-          hasVoted={hasVoted(userId, selectedCocktail.id)}
+          hasVoted={hasVoted(normalizedUsername, selectedCocktail.id)}
           voteCount={getVoteCount(selectedCocktail.id)}
           customTags={state.tagsByCocktail[selectedCocktail.id]}
           similarCocktails={getSimilar(selectedCocktail)}
           hasUserName={hasUserName}
-          onVote={() => toggleVote(userId, selectedCocktail.id)}
+          onVote={() => toggleVote(normalizedUsername, selectedCocktail.id)}
           onBack={() => setSelectedCocktailId(null)}
           onViewSimilar={(id) => setSelectedCocktailId(id)}
         />
@@ -676,11 +680,11 @@ export default function Index() {
                     >
                       <CocktailCard
                         cocktail={cocktail}
-                        hasVoted={hasVoted(userId, cocktail.id)}
+                      hasVoted={hasVoted(normalizedUsername, cocktail.id)}
                         voteCount={getVoteCount(cocktail.id)}
                         customTags={state.tagsByCocktail[cocktail.id]}
                         hasUserName={hasUserName}
-                        onVote={() => toggleVote(userId, cocktail.id)}
+                      onVote={() => toggleVote(normalizedUsername, cocktail.id)}
                         onView={() => setSelectedCocktailId(cocktail.id)}
                       />
                     </div>
@@ -720,6 +724,7 @@ export default function Index() {
             cocktails={cocktailsWithVotes}
             memberCount={memberCount}
             config={state.config}
+            candidateCocktails={shortlistCocktails}
             onSelectCocktail={(id) => setSelectedCocktailId(id)}
           />
         )}
@@ -733,7 +738,7 @@ export default function Index() {
             onEditName={handleEditName}
             onViewCocktail={handleViewCocktail}
             onToggleVote={handleToggleVote}
-            hasVoted={(cocktailId) => hasVoted(userId, cocktailId)}
+            hasVoted={(cocktailId) => hasVoted(normalizedUsername, cocktailId)}
             getVoteCount={getVoteCount}
             customTagsByCocktail={state.tagsByCocktail}
             onBrowseCocktails={handleBrowseCocktails}

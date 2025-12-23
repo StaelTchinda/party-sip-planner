@@ -1,33 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AppState, DEFAULT_APP_STATE } from '@/types/cocktail';
-import { getAppState, updateWithRetry, isConfigured, hasValidCredentials } from '@/lib/jsonbin';
+import { getAppState, updateWithRetry, hasValidCredentials } from '@/lib/jsonbin';
+import { isValidUsername, normalizeUsername } from '@/hooks/useUserId';
 import { getPopularCocktails } from '@/lib/cocktaildb';
 import { toast } from '@/hooks/use-toast';
-
-function makeUniqueName(
-  desiredName: string,
-  users: AppState['users'],
-  userId: string
-): string {
-  const base = desiredName.trim();
-  if (!base) return '';
-
-  // Build a case-insensitive set of names used by other users
-  const taken = new Set(
-    Object.entries(users)
-      .filter(([id]) => id !== userId)
-      .map(([, name]) => name.trim().toLowerCase())
-  );
-
-  let candidate = base;
-  let suffix = 2;
-  while (taken.has(candidate.trim().toLowerCase())) {
-    candidate = `${base} (${suffix})`;
-    suffix++;
-  }
-
-  return candidate;
-}
 
 interface UseAppStateReturn {
   state: AppState;
@@ -36,12 +12,12 @@ interface UseAppStateReturn {
   error: string | null;
   isDemoMode: boolean;
   refresh: () => Promise<void>;
-  toggleVote: (userId: string, cocktailId: string) => Promise<void>;
+  toggleVote: (username: string, cocktailId: string) => Promise<void>;
   updateShortlist: (shortlist: string[]) => Promise<void>;
   updateTags: (cocktailId: string, tags: string[]) => Promise<void>;
   updateConfig: (config: AppState['config']) => Promise<void>;
-  setUserName: (userId: string, userName: string) => Promise<void>;
-  hasVoted: (userId: string, cocktailId: string) => boolean;
+  setUserName: (username: string) => Promise<void>;
+  hasVoted: (username: string, cocktailId: string) => boolean;
   getVoteCount: (cocktailId: string) => number;
 }
 
@@ -96,11 +72,9 @@ export function useAppState(): UseAppStateReturn {
     refresh();
   }, [refresh]);
   
-  const toggleVote = useCallback(async (userId: string, cocktailId: string) => {
-    if (!userId) return;
-    
-    // Prevent voting if user has no name selected
-    if (!state.users[userId]) {
+  const toggleVote = useCallback(async (username: string, cocktailId: string) => {
+    const normalized = normalizeUsername(username);
+    if (!normalized || !isValidUsername(normalized)) {
       toast({
         title: 'Name required',
         description: 'Please select or enter your name to vote',
@@ -109,7 +83,7 @@ export function useAppState(): UseAppStateReturn {
       return;
     }
     
-    const currentVotes = state.votesByUser[userId] || [];
+    const currentVotes = state.votesByUser[normalized] || [];
     const hasVoted = currentVotes.includes(cocktailId);
     const newVotes = hasVoted
       ? currentVotes.filter(id => id !== cocktailId)
@@ -120,7 +94,7 @@ export function useAppState(): UseAppStateReturn {
       ...prev,
       votesByUser: {
         ...prev.votesByUser,
-        [userId]: newVotes,
+        [normalized]: newVotes,
       },
     }));
     
@@ -137,7 +111,7 @@ export function useAppState(): UseAppStateReturn {
       await updateWithRetry(current => ({
         votesByUser: {
           ...current.votesByUser,
-          [userId]: newVotes,
+          [normalized]: newVotes,
         },
       }));
       
@@ -151,7 +125,7 @@ export function useAppState(): UseAppStateReturn {
         ...prev,
         votesByUser: {
           ...prev.votesByUser,
-          [userId]: currentVotes,
+          [normalized]: currentVotes,
         },
       }));
       
@@ -165,7 +139,7 @@ export function useAppState(): UseAppStateReturn {
         variant: 'destructive',
       });
     }
-  }, [state.votesByUser, state.users]);
+  }, [state.votesByUser]);
   
   const updateShortlist = useCallback(async (shortlist: string[]) => {
     const previous = state.shortlist;
@@ -267,64 +241,29 @@ export function useAppState(): UseAppStateReturn {
     }
   }, [state.config]);
   
-  const setUserName = useCallback(async (userId: string, userName: string) => {
-    if (!userId || !userName.trim()) return;
-    
-    const previous = state.users;
-    const uniqueName = makeUniqueName(userName, state.users, userId);
-    
-    // Optimistic update with unique name
-    setState(prev => ({
-      ...prev,
-      users: {
-        ...prev.users,
-        [userId]: uniqueName,
-      },
-    }));
-    
-    // If in demo mode, just show toast and keep local state
-    if (!hasValidCredentials()) {
+  const setUserName = useCallback(async (userName: string) => {
+    const normalized = normalizeUsername(userName);
+    if (!normalized || !isValidUsername(normalized)) {
       toast({
-        title: 'Name saved (demo)',
-        description: 'Add JSONBin credentials to save permanently',
+        title: 'Invalid username',
+        description: 'Use 3-30 chars: lowercase letters, numbers, underscores',
+        variant: 'destructive',
       });
       return;
     }
     
-    try {
-      // Update and get the full state back from server
-      const updatedState = await updateWithRetry(current => ({
-        users: {
-          ...current.users,
-          [userId]: makeUniqueName(userName, current.users, userId),
-        },
-      }));
-      
-      // Update the entire state with the server response to ensure votes are synchronized
-      setState(updatedState);
-      
-      toast({
-        title: 'Name saved',
-        description: 'Your name has been recorded',
-      });
-    } catch (err) {
-      // Revert on failure
-      setState(prev => ({ ...prev, users: previous }));
-      
-      console.error('Failed to save user name:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      
-      toast({
-        title: 'Error',
-        description: `Failed to save name: ${errorMessage}`,
-        variant: 'destructive',
-      });
-    }
-  }, [state.users]);
+    // Username is stored locally via useUserName hook
+    // It will be persisted to votesByUser when the user votes
+    toast({
+      title: 'Name saved',
+      description: 'Your name is ready. Start voting to save it!',
+    });
+  }, []);
   
-  const hasVoted = useCallback((userId: string, cocktailId: string): boolean => {
-    if (!userId) return false;
-    return (state.votesByUser[userId] || []).includes(cocktailId);
+  const hasVoted = useCallback((username: string, cocktailId: string): boolean => {
+    const normalized = normalizeUsername(username);
+    if (!normalized) return false;
+    return (state.votesByUser[normalized] || []).includes(cocktailId);
   }, [state.votesByUser]);
   
   const getVoteCount = useCallback((cocktailId: string): number => {

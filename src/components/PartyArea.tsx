@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Cocktail, AppConfig } from '@/types/cocktail';
 import { useIngredientStats } from '@/hooks/useCocktails';
 import { Badge } from '@/components/ui/badge';
@@ -14,13 +15,31 @@ interface PartyAreaProps {
   cocktails: PartyCocktail[];
   memberCount: number;
   config: AppConfig;
+  candidateCocktails: Cocktail[];
   onSelectCocktail: (cocktailId: string) => void;
 }
 
-export function PartyArea({ cocktails, memberCount, config, onSelectCocktail }: PartyAreaProps) {
-  const cocktailList = cocktails.map(c => c.cocktail);
+export function PartyArea({ cocktails, memberCount, config, candidateCocktails, onSelectCocktail }: PartyAreaProps) {
+  const cocktailList = useMemo(() => cocktails.map(c => c.cocktail), [cocktails]);
   const totalVotes = cocktails.reduce((sum, c) => sum + c.votes, 0);
   const { ingredients, spirits, totalIngredients, totalSpirits } = useIngredientStats(cocktailList);
+  const availableIngredients = useMemo(() => {
+    const set = new Set<string>();
+    cocktailList.forEach(cocktail => {
+      cocktail.ingredients.forEach(ing => set.add(ing.name.trim().toLowerCase()));
+    });
+    return set;
+  }, [cocktailList]);
+  const recommendations = useMemo(() => {
+    if (candidateCocktails.length === 0 || availableIngredients.size === 0) {
+      return [];
+    }
+    const votedIds = new Set(cocktailList.map(c => c.id));
+    return candidateCocktails.filter(cocktail => {
+      if (votedIds.has(cocktail.id)) return false;
+      return cocktail.ingredients.every(ing => availableIngredients.has(ing.name.trim().toLowerCase()));
+    });
+  }, [candidateCocktails, availableIngredients, cocktailList]);
   
   const ingredientPercent = Math.min((totalIngredients / config.maxIngredients) * 100, 100);
   const spiritPercent = Math.min((totalSpirits / config.maxLiquors) * 100, 100);
@@ -194,6 +213,53 @@ export function PartyArea({ cocktails, memberCount, config, onSelectCocktail }: 
         <p className="text-sm text-muted-foreground text-center mt-3">
           Based on {cocktails.length} cocktail{cocktails.length === 1 ? '' : 's'} and {totalVotes} vote{totalVotes === 1 ? '' : 's'}
         </p>
+      </div>
+
+      {/* Ready-to-make recommendations */}
+      <div className="bg-card rounded-xl p-4 border border-border">
+        <h3 className="font-display text-lg font-semibold mb-3 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-primary" />
+          Cocktails you can make now
+        </h3>
+        {recommendations.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No extra cocktails fit the current shopping list yet. Add more overlapping votes to unlock ready-to-make ideas.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {recommendations.map(cocktail => (
+              <div
+                key={cocktail.id}
+                className="p-3 rounded-lg border border-border/60 bg-secondary/30"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-foreground">{cocktail.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {cocktail.ingredients.length} ingredients • {cocktail.glass}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    Ready with current list
+                  </Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {cocktail.ingredients.map(ing => (
+                    <span
+                      key={`${cocktail.id}-${ing.name}`}
+                      className="text-xs px-2 py-1 rounded-full bg-background border border-border text-foreground"
+                    >
+                      {ing.name}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Uses only ingredients already on the shopping list—no extras needed.
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

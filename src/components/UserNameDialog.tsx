@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { isValidUsername, normalizeUsername } from '@/hooks/useUserId';
 
 interface UserNameDialogProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function UserNameDialog({
   const [selectedExistingName, setSelectedExistingName] = useState<string>('');
   const [newName, setNewName] = useState<string>('');
   const [useNewName, setUseNewName] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Deduplicate existing names and sort
   const uniqueNames = useMemo(() => {
@@ -41,25 +43,38 @@ export function UserNameDialog({
   }, [existingNames]);
 
   const handleContinue = () => {
-    const nameToUse = useNewName ? newName.trim() : selectedExistingName.trim();
-    if (nameToUse) {
-      onSelectName(nameToUse);
-      // Reset form
-      setSelectedExistingName('');
-      setNewName('');
-      setUseNewName(false);
+    if (useNewName) {
+      // For new names, validate
+      const normalized = normalizeUsername(newName.trim());
+      if (!normalized || !isValidUsername(normalized)) {
+        setError('Use 3-30 chars: lowercase letters, numbers, underscores.');
+        return;
+      }
+      onSelectName(normalized);
+    } else if (selectedExistingName) {
+      // For existing names, use as-is (they're already valid)
+      onSelectName(selectedExistingName);
+    } else {
+      // Should not happen due to canContinue check, but handle gracefully
+      return;
     }
-  };
-
-  const handleSkip = () => {
-    onSkip();
+    
     // Reset form
     setSelectedExistingName('');
     setNewName('');
     setUseNewName(false);
+    setError(null);
   };
 
-  const canContinue = useNewName ? newName.trim().length > 0 : selectedExistingName.length > 0;
+  const handleSkip = () => {
+    onSkip();
+    setSelectedExistingName('');
+    setNewName('');
+    setUseNewName(false);
+    setError(null);
+  };
+
+  const canContinue = selectedExistingName.length > 0 || (useNewName && newName.trim().length > 0);
 
   return (
     <Dialog open={open}>
@@ -71,7 +86,7 @@ export function UserNameDialog({
         <DialogHeader>
           <DialogTitle>Select Your Name</DialogTitle>
           <DialogDescription>
-            Choose your name to start voting on cocktails. You can select an existing name or enter a new one.
+            Choose a username to start voting. Allowed: lowercase letters, numbers, underscores (3–30 chars).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -117,7 +132,7 @@ export function UserNameDialog({
             <Label htmlFor="new-name">Enter new name</Label>
             <Input
               id="new-name"
-              placeholder="Type your name..."
+              placeholder="e.g. party_host"
               value={newName}
               onChange={(e) => {
                 setNewName(e.target.value);
@@ -125,6 +140,7 @@ export function UserNameDialog({
                   setUseNewName(true);
                   setSelectedExistingName('');
                 }
+                setError(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && canContinue) {
@@ -132,6 +148,7 @@ export function UserNameDialog({
                 }
               }}
             />
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
