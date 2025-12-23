@@ -476,9 +476,10 @@ export default function Index() {
   // Selected cocktail for detail view - look across current lists and saved votes
   const cocktailLookup = useMemo(() => {
     const map = new Map<string, Cocktail>();
-    [...sourceCocktails, ...votedCocktailDetails, ...shortlistCocktails].forEach(c => map.set(c.id, c));
+    // Include all voted cocktails so selections from the Party tab can open details
+    [...sourceCocktails, ...votedCocktailDetails, ...shortlistCocktails, ...allVotedCocktails].forEach(c => map.set(c.id, c));
     return map;
-  }, [sourceCocktails, votedCocktailDetails, shortlistCocktails]);
+  }, [sourceCocktails, votedCocktailDetails, shortlistCocktails, allVotedCocktails]);
   
   const selectedCocktail = useMemo(() => {
     if (!selectedCocktailId) return null;
