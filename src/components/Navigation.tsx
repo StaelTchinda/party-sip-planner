@@ -1,8 +1,8 @@
 import { Button } from '@/components/ui/button';
-import { GlassWater, Beaker, Crown, RefreshCw } from 'lucide-react';
+import { GlassWater, Beaker, Crown, RefreshCw, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type Tab = 'cocktails' | 'ingredients' | 'admin';
+export type Tab = 'cocktails' | 'ingredients' | 'my-area' | 'admin';
 
 interface NavigationProps {
   activeTab: Tab;
@@ -22,6 +22,7 @@ export function Navigation({
   const tabs = [
     { id: 'cocktails' as Tab, icon: GlassWater, label: 'Cocktails' },
     { id: 'ingredients' as Tab, icon: Beaker, label: 'Ingredients' },
+    { id: 'my-area' as Tab, icon: UserRound, label: 'My area' },
     ...(isAdmin ? [{ id: 'admin' as Tab, icon: Crown, label: 'Admin' }] : []),
   ];
   

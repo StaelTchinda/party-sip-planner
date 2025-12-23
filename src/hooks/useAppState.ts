@@ -4,6 +4,31 @@ import { getAppState, updateWithRetry, isConfigured, hasValidCredentials } from 
 import { getPopularCocktails } from '@/lib/cocktaildb';
 import { toast } from '@/hooks/use-toast';
 
+function makeUniqueName(
+  desiredName: string,
+  users: AppState['users'],
+  userId: string
+): string {
+  const base = desiredName.trim();
+  if (!base) return '';
+
+  // Build a case-insensitive set of names used by other users
+  const taken = new Set(
+    Object.entries(users)
+      .filter(([id]) => id !== userId)
+      .map(([, name]) => name.trim().toLowerCase())
+  );
+
+  let candidate = base;
+  let suffix = 2;
+  while (taken.has(candidate.trim().toLowerCase())) {
+    candidate = `${base} (${suffix})`;
+    suffix++;
+  }
+
+  return candidate;
+}
+
 interface UseAppStateReturn {
   state: AppState;
   isLoading: boolean;
@@ -246,13 +271,14 @@ export function useAppState(): UseAppStateReturn {
     if (!userId || !userName.trim()) return;
     
     const previous = state.users;
+    const uniqueName = makeUniqueName(userName, state.users, userId);
     
-    // Optimistic update
+    // Optimistic update with unique name
     setState(prev => ({
       ...prev,
       users: {
         ...prev.users,
-        [userId]: userName.trim(),
+        [userId]: uniqueName,
       },
     }));
     
@@ -270,7 +296,7 @@ export function useAppState(): UseAppStateReturn {
       const updatedState = await updateWithRetry(current => ({
         users: {
           ...current.users,
-          [userId]: userName.trim(),
+          [userId]: makeUniqueName(userName, current.users, userId),
         },
       }));
       
