@@ -163,6 +163,15 @@ export default function Index() {
     });
     return tagsSet.size > 0 ? Array.from(tagsSet) : CUSTOM_TAGS.slice(0, 6);
   }, [state.tagsByCocktail]);
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      filters.search.trim().length > 0 ||
+      filters.ingredients.length > 0 ||
+      filters.tags.length > 0 ||
+      filters.alcoholic !== 'all'
+    );
+  }, [filters]);
   
   // Fetch cocktails for the active letter
   useEffect(() => {
@@ -574,7 +583,11 @@ export default function Index() {
             <div className="space-y-3 p-3 bg-card rounded-lg border border-border">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">Browse alphabetically</p>
-                <span className="text-xs text-muted-foreground">Letter: {activeLetter}</span>
+                <span className="text-xs text-muted-foreground">
+                  {hasActiveFilters
+                    ? 'Alphabetical browsing disabled while filters are active'
+                    : `Letter: ${activeLetter}`}
+                </span>
               </div>
               <div className="overflow-x-auto -mx-1">
                 <div className="flex items-center gap-1 px-1 pb-1">
@@ -585,6 +598,9 @@ export default function Index() {
                         key={letter}
                         size="sm"
                         variant={isActive ? 'default' : 'ghost'}
+                        disabled={hasActiveFilters}
+                        className={hasActiveFilters ? 'opacity-60 cursor-not-allowed' : ''}
+                        title={hasActiveFilters ? 'Clear filters to browse by letter' : undefined}
                         onClick={() => {
                           setActiveLetter(letter);
                           setCurrentPage(1);
@@ -600,9 +616,18 @@ export default function Index() {
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-muted-foreground">
                 <span>
                   {filteredCocktails.length === 0
-                    ? `No cocktails for "${activeLetter}" with the current filters`
-                    : `Showing ${pageStart}-${pageEnd} of ${filteredCocktails.length} for "${activeLetter}"`}
+                    ? hasActiveFilters
+                      ? 'No cocktails match the current filters.'
+                      : `No cocktails for "${activeLetter}" with the current filters`
+                    : hasActiveFilters
+                      ? `Showing ${pageStart}-${pageEnd} of ${filteredCocktails.length} results`
+                      : `Showing ${pageStart}-${pageEnd} of ${filteredCocktails.length} for "${activeLetter}"`}
                 </span>
+                {hasActiveFilters && (
+                  <span className="text-xs text-muted-foreground">
+                    Clear filters to re-enable alphabetical browsing.
+                  </span>
+                )}
                 {filteredCocktails.length > 0 && totalPages > 1 && (
                   <div className="flex items-center gap-2">
                     <Button
