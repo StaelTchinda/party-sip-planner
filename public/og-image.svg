@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg-og" x1="80" y1="40" x2="1120" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="flare" x1="140" y1="80" x2="1000" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f97316" stop-opacity="0.85"/>
+      <stop offset="0.5" stop-color="#f43f5e" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#7c3aed" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="90" y1="66" x2="170" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#ffe8d6" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="48" fill="url(#bg-og)"/>
+  <rect width="1200" height="630" rx="48" fill="url(#flare)" opacity="0.35"/>
+  <circle cx="260" cy="170" r="170" fill="#ffffff" opacity="0.06"/>
+  <circle cx="240" cy="150" r="120" fill="#ffffff" opacity="0.04"/>
+  <g transform="translate(110 110) scale(2.15)">
+    <path d="M76 52h104l-52 68z" fill="url(#glass)" stroke="#0b1020" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M128 120v68" stroke="#fef3c7" stroke-width="8" stroke-linecap="round"/>
+    <path d="M104 196h48" stroke="#fef3c7" stroke-width="8" stroke-linecap="round"/>
+    <path d="M152 62l28-22" stroke="#ffe4e6" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="186" cy="38" r="12" fill="#fef3c7" stroke="#0b1020" stroke-width="4"/>
+    <circle cx="108" cy="86" r="5" fill="#f8fafc" opacity="0.85"/>
+    <circle cx="132" cy="92" r="4" fill="#f8fafc" opacity="0.85"/>
+    <path d="M88 150c8 10 21 16 40 16s32-6 40-16" stroke="#fef9c3" stroke-width="5" stroke-linecap="round" opacity="0.75"/>
+  </g>
+  <text x="480" y="250" fill="#f8fafc" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="64" font-weight="700" letter-spacing="0.5">
+    Party Sip Planner
+  </text>
+  <text x="480" y="310" fill="#fde68a" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="32" font-weight="600">
+    Collaborative cocktail vote &amp; shopping prep.
+  </text>
+  <text x="480" y="370" fill="#e2e8f0" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="24">
+    - Search and filter cocktails fast
+  </text>
+  <text x="480" y="410" fill="#e2e8f0" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="24">
+    - Vote together and tag favorites
+  </text>
+  <text x="480" y="450" fill="#e2e8f0" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="24">
+    - Party summary, my picks, admin views
+  </text>
+</svg>
+
