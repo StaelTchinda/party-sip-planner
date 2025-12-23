@@ -6,7 +6,7 @@ import { useUserId } from '@/hooks/useUserId';
 import { CocktailCard } from '@/components/CocktailCard';
 import { CocktailDetail } from '@/components/CocktailDetail';
 import { FilterBar, FilterState } from '@/components/FilterBar';
-import { IngredientsDashboard } from '@/components/IngredientsDashboard';
+import { PartyArea } from '@/components/PartyArea';
 import { AdminPanel } from '@/components/AdminPanel';
 import { Navigation, Tab } from '@/components/Navigation';
 import { UserNameDialog } from '@/components/UserNameDialog';
@@ -39,6 +39,7 @@ export default function Index() {
   const [letterCocktails, setLetterCocktails] = useState<Cocktail[]>([]);
   const [isLetterLoading, setIsLetterLoading] = useState(true);
   const [votedCocktailDetails, setVotedCocktailDetails] = useState<Cocktail[]>([]);
+  const [allVotedCocktails, setAllVotedCocktails] = useState<Cocktail[]>([]);
   
   // Initialize filters from URL params
   const getInitialFilters = useCallback((): FilterState => {
@@ -96,6 +97,25 @@ export default function Index() {
   } = useAppState();
   
   const { cocktails: shortlistCocktails, getSimilar } = useCocktails(state.shortlist);
+  const allVotedIds = useMemo(() => {
+    const unique = new Set<string>();
+    Object.values(state.votesByUser).forEach(votes => {
+      votes.forEach(id => unique.add(id));
+    });
+    return Array.from(unique);
+  }, [state.votesByUser]);
+  
+  const voteCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    Object.values(state.votesByUser).forEach(votes => {
+      votes.forEach(id => {
+        counts[id] = (counts[id] || 0) + 1;
+      });
+    });
+    return counts;
+  }, [state.votesByUser]);
+  
+  const memberCount = useMemo(() => Object.keys(state.users).length, [state.users]);
   
   const isLoading = isStateLoading || (!isUsingApiSearch && isLetterLoading);
   
@@ -379,8 +399,50 @@ export default function Index() {
     };
   }, [userId, state.votesByUser, letterCocktails, apiSearchResults, shortlistCocktails]);
   
+  // Load all voted cocktails for the Party area
+  useEffect(() => {
+    let cancelled = false;
+    const loadAllVotes = async () => {
+      if (allVotedIds.length === 0) {
+        setAllVotedCocktails([]);
+        return;
+      }
+      
+      const lookup = new Map<string, Cocktail>();
+      [...letterCocktails, ...apiSearchResults, ...shortlistCocktails, ...votedCocktailDetails].forEach(c => lookup.set(c.id, c));
+      
+      const missingIds = allVotedIds.filter(id => !lookup.has(id));
+      let fetched: Cocktail[] = [];
+      if (missingIds.length > 0) {
+        fetched = await getCocktailsByIds(missingIds);
+        fetched.forEach(c => lookup.set(c.id, c));
+      }
+      
+      if (cancelled) return;
+      const ordered = allVotedIds
+        .map(id => lookup.get(id))
+        .filter((c): c is Cocktail => Boolean(c));
+      setAllVotedCocktails(ordered);
+    };
+    
+    loadAllVotes();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [allVotedIds, letterCocktails, apiSearchResults, shortlistCocktails, votedCocktailDetails]);
+  
   // Get voted cocktails for ingredients dashboard
   const votedCocktails = useMemo(() => votedCocktailDetails, [votedCocktailDetails]);
+  const cocktailsWithVotes = useMemo(() => {
+    return allVotedCocktails
+      .map(c => ({
+        cocktail: c,
+        votes: voteCounts[c.id] || 0,
+      }))
+      .filter(item => item.votes > 0)
+      .sort((a, b) => b.votes - a.votes || a.cocktail.name.localeCompare(b.cocktail.name));
+  }, [allVotedCocktails, voteCounts]);
   
   const handleEditName = useCallback(() => {
     setShowNameDialog(true);
@@ -491,7 +553,7 @@ export default function Index() {
                   ? `${filteredCocktails.length} result${filteredCocktails.length !== 1 ? 's' : ''} from database`
                   : `${filteredCocktails.length} cocktails starting with "${activeLetter}"`
             )}
-            {activeTab === 'ingredients' && `Shopping list for ${votedCocktails.length} selected cocktails`}
+            {activeTab === 'party' && `Party summary for ${cocktailsWithVotes.length} voted cocktail${cocktailsWithVotes.length === 1 ? '' : 's'}`}
             {activeTab === 'my-area' && `Your profile and ${votedCocktails.length} liked cocktail${votedCocktails.length === 1 ? '' : 's'}`}
             {activeTab === 'admin' && 'Manage your party menu'}
           </p>
@@ -627,11 +689,13 @@ export default function Index() {
           </div>
         )}
         
-        {/* Ingredients tab */}
-        {activeTab === 'ingredients' && (
-          <IngredientsDashboard
-            cocktails={votedCocktails}
+        {/* Party tab */}
+        {activeTab === 'party' && (
+          <PartyArea
+            cocktails={cocktailsWithVotes}
+            memberCount={memberCount}
             config={state.config}
+            onSelectCocktail={(id) => setSelectedCocktailId(id)}
           />
         )}
         
