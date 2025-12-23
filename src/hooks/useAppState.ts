@@ -246,7 +246,7 @@ export function useAppState(): UseAppStateReturn {
     if (!normalized || !isValidUsername(normalized)) {
       toast({
         title: 'Invalid username',
-        description: 'Use 3-30 chars: lowercase letters, numbers, underscores',
+        description: 'Use 3-30 chars: letters, numbers, underscores',
         variant: 'destructive',
       });
       return;

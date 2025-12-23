@@ -47,7 +47,7 @@ export function UserNameDialog({
       // For new names, validate
       const normalized = normalizeUsername(newName.trim());
       if (!normalized || !isValidUsername(normalized)) {
-        setError('Use 3-30 chars: lowercase letters, numbers, underscores.');
+        setError('Use 3-30 chars: letters, numbers, underscores.');
         return;
       }
       onSelectName(normalized);
@@ -86,7 +86,7 @@ export function UserNameDialog({
         <DialogHeader>
           <DialogTitle>Select Your Name</DialogTitle>
           <DialogDescription>
-            Choose a username to start voting. Allowed: lowercase letters, numbers, underscores (3–30 chars).
+            Choose a username to start voting. Allowed: letters, numbers, underscores (3–30 chars).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">

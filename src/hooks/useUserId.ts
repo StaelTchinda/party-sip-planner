@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 
 const USERNAME_KEY = 'cocktail_vote_username';
-const USERNAME_REGEX = /^[a-z0-9_]{3,30}$/;
+const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
 
 export function isValidUsername(name: string): boolean {
   return USERNAME_REGEX.test(name.trim());
 }
 
 export function normalizeUsername(name: string): string {
-  return name.trim().toLowerCase();
+  return name.trim();
 }
 
 export function useUserName(): [string, (name: string) => void] {
