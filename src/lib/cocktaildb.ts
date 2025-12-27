@@ -1,9 +1,48 @@
-import { CocktailDBDrink, Cocktail, Ingredient } from '@/types/cocktail';
+import { 
+  CocktailDBDrink, 
+  Cocktail, 
+  Ingredient, 
+  CocktailDBIngredient, 
+  IngredientSummary, 
+  IngredientDetail 
+} from '@/types/cocktail';
 
 const API_BASE = 'https://www.thecocktaildb.com/api/json/v1/1';
 
 // In-memory cache for cocktail data
 const cocktailCache = new Map<string, Cocktail>();
+const ingredientCache = new Map<string, IngredientDetail>();
+let ingredientListCache: IngredientSummary[] | null = null;
+
+const getIngredientImage = (name: string, size: 'Small' | 'Medium' | 'Large' = 'Medium') => {
+  const encoded = encodeURIComponent(name.trim());
+  return `https://www.thecocktaildb.com/images/ingredients/${encoded}-${size}.png`;
+};
+
+function transformIngredientSummary(input: CocktailDBIngredient | { strIngredient1: string }): IngredientSummary {
+  const name = 'strIngredient' in input ? input.strIngredient : input.strIngredient1;
+  const id = 'idIngredient' in input && input.idIngredient ? input.idIngredient : name;
+  const type = 'strType' in input ? input.strType : null;
+  const alcoholic = 'strAlcohol' in input && input.strAlcohol != null
+    ? input.strAlcohol === 'Yes'
+    : null;
+
+  return {
+    id,
+    name,
+    thumbnail: getIngredientImage(name, 'Medium'),
+    type,
+    alcoholic,
+  };
+}
+
+function transformIngredientDetail(ingredient: CocktailDBIngredient): IngredientDetail {
+  return {
+    ...transformIngredientSummary(ingredient),
+    description: ingredient.strDescription,
+    abv: ingredient.strABV,
+  };
+}
 
 function extractIngredients(drink: CocktailDBDrink): Ingredient[] {
   const ingredients: Ingredient[] = [];
@@ -59,6 +98,77 @@ export async function getCocktailById(id: string): Promise<Cocktail | null> {
     return null;
   } catch (error) {
     console.error('Error fetching cocktail:', error);
+    return null;
+  }
+}
+
+export async function searchIngredients(query: string): Promise<IngredientSummary[]> {
+  if (!query.trim()) return [];
+
+  try {
+    const response = await fetch(`${API_BASE}/search.php?i=${encodeURIComponent(query)}`);
+    const data = await response.json();
+
+    if (data.ingredients) {
+      return data.ingredients.map((ing: CocktailDBIngredient) => transformIngredientSummary(ing));
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Error searching ingredients:', error);
+    return [];
+  }
+}
+
+export async function listIngredients(limit: number = 120): Promise<IngredientSummary[]> {
+  if (ingredientListCache) {
+    return ingredientListCache.slice(0, limit);
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/list.php?i=list`);
+    const data = await response.json();
+
+    if (data.drinks) {
+      const items = data.drinks.map((item: { strIngredient1: string }) =>
+        transformIngredientSummary(item)
+      );
+      ingredientListCache = items;
+      return items.slice(0, limit);
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Error fetching ingredient list:', error);
+    return [];
+  }
+}
+
+export async function getIngredientDetail(name: string): Promise<IngredientDetail | null> {
+  const key = name.trim().toLowerCase();
+  if (!key) return null;
+
+  if (ingredientCache.has(key)) {
+    return ingredientCache.get(key)!;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/search.php?i=${encodeURIComponent(name)}`);
+    const data = await response.json();
+
+    if (data.ingredients && data.ingredients.length > 0) {
+      const match = data.ingredients.find(
+        (ing: CocktailDBIngredient) => ing.strIngredient.toLowerCase() === key
+      ) as CocktailDBIngredient | undefined;
+
+      const ingredient = transformIngredientDetail(match ?? data.ingredients[0]);
+      ingredientCache.set(key, ingredient);
+      return ingredient;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching ingredient detail:', error);
     return null;
   }
 }
@@ -175,6 +285,10 @@ export async function getCocktailsByIngredientFilter(ingredient: string): Promis
   const ids = await filterByIngredient(ingredient);
   if (ids.length === 0) return [];
   return getCocktailsByIds(ids);
+}
+
+export async function getCocktailsByIngredient(ingredient: string): Promise<Cocktail[]> {
+  return getCocktailsByIngredientFilter(ingredient);
 }
 
 export async function filterByMultipleIngredients(ingredients: string[]): Promise<string[]> {

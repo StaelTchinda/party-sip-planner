@@ -17,9 +17,10 @@ interface PartyAreaProps {
   config: AppConfig;
   candidateCocktails: Cocktail[];
   onSelectCocktail: (cocktailId: string) => void;
+  onSelectIngredient?: (ingredient: string) => void;
 }
 
-export function PartyArea({ cocktails, memberCount, config, candidateCocktails, onSelectCocktail }: PartyAreaProps) {
+export function PartyArea({ cocktails, memberCount, config, candidateCocktails, onSelectCocktail, onSelectIngredient }: PartyAreaProps) {
   const cocktailList = useMemo(() => cocktails.map(c => c.cocktail), [cocktails]);
   const totalVotes = cocktails.reduce((sum, c) => sum + c.votes, 0);
   const { ingredients, spirits, totalIngredients, totalSpirits } = useIngredientStats(cocktailList);
@@ -196,7 +197,13 @@ export function PartyArea({ cocktails, memberCount, config, candidateCocktails, 
               key={ing.name}
               className="flex justify-between items-center py-1.5 px-2 rounded hover:bg-secondary/50"
             >
-              <span className="text-sm text-foreground">{ing.name}</span>
+              <button
+                type="button"
+                onClick={() => onSelectIngredient?.(ing.name)}
+                className="text-sm text-left text-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+              >
+                {ing.name}
+              </button>
               <div className="flex items-center gap-2">
                 {ing.aggregatedMeasure && (
                   <span className="text-xs text-muted-foreground">

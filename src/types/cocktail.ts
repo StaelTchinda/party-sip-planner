@@ -48,6 +48,29 @@ export interface Ingredient {
   measure: string | null;
 }
 
+// Ingredient metadata from TheCocktailDB
+export interface CocktailDBIngredient {
+  idIngredient: string;
+  strIngredient: string;
+  strDescription: string | null;
+  strType: string | null;
+  strAlcohol: 'Yes' | 'No' | null;
+  strABV: string | null;
+}
+
+export interface IngredientSummary {
+  id: string;
+  name: string;
+  thumbnail: string;
+  type?: string | null;
+  alcoholic?: boolean | null;
+}
+
+export interface IngredientDetail extends IngredientSummary {
+  description: string | null;
+  abv: string | null;
+}
+
 export interface Cocktail {
   id: string;
   name: string;
@@ -65,7 +88,6 @@ export interface AppState {
   shortlist: string[];
   votesByUser: Record<string, string[]>;
   tagsByCocktail: Record<string, string[]>;
-  users: Record<string, string>; // userId -> userName mapping
   config: AppConfig;
 }
 
@@ -98,7 +120,6 @@ export const DEFAULT_APP_STATE: AppState = {
   shortlist: [],
   votesByUser: {},
   tagsByCocktail: {},
-  users: {},
   config: DEFAULT_CONFIG,
 };
 

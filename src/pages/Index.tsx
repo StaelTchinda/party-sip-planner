@@ -11,15 +11,21 @@ import { AdminPanel } from '@/components/AdminPanel';
 import { Navigation, Tab } from '@/components/Navigation';
 import { UserNameDialog } from '@/components/UserNameDialog';
 import { MyArea } from '@/components/MyArea';
+import { IngredientCard } from '@/components/IngredientCard';
+import { IngredientDetail } from '@/components/IngredientDetail';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, PartyPopper, Info } from 'lucide-react';
-import { Cocktail, CUSTOM_TAGS } from '@/types/cocktail';
+import { Cocktail, CUSTOM_TAGS, IngredientSummary, IngredientDetail as IngredientDetailType } from '@/types/cocktail';
 import { 
   searchCocktails, 
   filterByMultipleIngredients, 
   getCocktailsByIds,
   filterByAlcoholic,
   getCocktailsByLetter,
+  listIngredients,
+  searchIngredients,
+  getIngredientDetail,
+  getCocktailsByIngredient,
 } from '@/lib/cocktaildb';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -40,6 +46,13 @@ export default function Index() {
   const [isLetterLoading, setIsLetterLoading] = useState(true);
   const [votedCocktailDetails, setVotedCocktailDetails] = useState<Cocktail[]>([]);
   const [allVotedCocktails, setAllVotedCocktails] = useState<Cocktail[]>([]);
+  const [ingredientSearch, setIngredientSearch] = useState('');
+  const [ingredients, setIngredients] = useState<IngredientSummary[]>([]);
+  const [filteredIngredients, setFilteredIngredients] = useState<IngredientSummary[]>([]);
+  const [isIngredientListLoading, setIsIngredientListLoading] = useState(false);
+  const [selectedIngredient, setSelectedIngredient] = useState<IngredientDetailType | null>(null);
+  const [ingredientCocktails, setIngredientCocktails] = useState<Cocktail[]>([]);
+  const [isIngredientDetailLoading, setIsIngredientDetailLoading] = useState(false);
   
   // Initialize filters from URL params
   const getInitialFilters = useCallback((): FilterState => {
@@ -158,6 +171,38 @@ export default function Index() {
   const handleSkipName = useCallback(() => {
     setShowNameDialog(false);
   }, []);
+
+  const loadIngredientDetail = useCallback(async (ingredientName: string) => {
+    const name = ingredientName.trim();
+    if (!name) return;
+
+    setActiveTab('ingredients');
+    setSelectedCocktailId(null);
+    setSelectedIngredient(null);
+    setIsIngredientDetailLoading(true);
+
+    try {
+      const [detail, cocktailsForIngredient] = await Promise.all([
+        getIngredientDetail(name),
+        getCocktailsByIngredient(name),
+      ]);
+
+      if (detail) {
+        setSelectedIngredient(detail);
+      }
+      setIngredientCocktails(cocktailsForIngredient);
+    } catch (error) {
+      console.error('Error loading ingredient detail', error);
+    } finally {
+      setIsIngredientDetailLoading(false);
+    }
+  }, []);
+
+  const handleCloseIngredientDetail = useCallback(() => {
+    setSelectedIngredient(null);
+    setIngredientCocktails([]);
+    setIsIngredientDetailLoading(false);
+  }, []);
   
   // Get available tags from data
   const availableTags = useMemo(() => {
@@ -176,6 +221,67 @@ export default function Index() {
       filters.alcoholic !== 'all'
     );
   }, [filters]);
+
+  // Load ingredient list when entering the ingredients tab
+  useEffect(() => {
+    if (activeTab !== 'ingredients' || ingredients.length > 0 || isIngredientListLoading) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadIngredients = async () => {
+      setIsIngredientListLoading(true);
+      try {
+        const list = await listIngredients(150);
+        if (!cancelled) {
+          setIngredients(list);
+          setFilteredIngredients(list);
+        }
+      } catch (error) {
+        console.error('Error loading ingredients', error);
+      } finally {
+        if (!cancelled) {
+          setIsIngredientListLoading(false);
+        }
+      }
+    };
+
+    loadIngredients();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, ingredients.length, isIngredientListLoading]);
+
+  // Search ingredients
+  useEffect(() => {
+    if (ingredientSearch.trim().length === 0) {
+      setFilteredIngredients(ingredients);
+      return;
+    }
+
+    let cancelled = false;
+    setIsIngredientListLoading(true);
+    const timeoutId = setTimeout(async () => {
+      try {
+        const results = await searchIngredients(ingredientSearch);
+        if (!cancelled) {
+          setFilteredIngredients(results);
+        }
+      } catch (error) {
+        console.error('Error searching ingredients', error);
+      } finally {
+        if (!cancelled) {
+          setIsIngredientListLoading(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [ingredientSearch, ingredients]);
   
   // Fetch cocktails for the active letter
   useEffect(() => {
@@ -527,6 +633,7 @@ export default function Index() {
           onVote={() => toggleVote(normalizedUsername, selectedCocktail.id)}
           onBack={() => setSelectedCocktailId(null)}
           onViewSimilar={(id) => setSelectedCocktailId(id)}
+          onViewIngredient={loadIngredientDetail}
         />
         <UserNameDialog
           open={showNameDialog}
@@ -566,6 +673,11 @@ export default function Index() {
                 : isUsingApiSearch
                   ? `${filteredCocktails.length} result${filteredCocktails.length !== 1 ? 's' : ''} from database`
                   : `${filteredCocktails.length} cocktails starting with "${activeLetter}"`
+            )}
+            {activeTab === 'ingredients' && (
+              selectedIngredient
+                ? `Ingredient details for ${selectedIngredient.name}`
+                : `${filteredIngredients.length} ingredients`
             )}
             {activeTab === 'party' && `Party summary for ${cocktailsWithVotes.length} voted cocktail${cocktailsWithVotes.length === 1 ? '' : 's'}`}
             {activeTab === 'my-area' && `Your profile and ${votedCocktails.length} liked cocktail${votedCocktails.length === 1 ? '' : 's'}`}
@@ -719,6 +831,81 @@ export default function Index() {
           </div>
         )}
         
+        {/* Ingredients tab */}
+        {activeTab === 'ingredients' && (
+          <div className="space-y-4">
+            <div className="space-y-3 p-3 bg-card rounded-lg border border-border">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Find ingredients</p>
+                <span className="text-xs text-muted-foreground">
+                  {filteredIngredients.length} result{filteredIngredients.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  value={ingredientSearch}
+                  onChange={(e) => setIngredientSearch(e.target.value)}
+                  placeholder="Search by name (e.g., lime, vodka, mint)"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIngredientSearch('');
+                    setFilteredIngredients(ingredients);
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+
+            {isIngredientDetailLoading && (
+              <div className="text-center py-12 text-muted-foreground">
+                <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-3" />
+                <p>Loading ingredient...</p>
+              </div>
+            )}
+
+            {!isIngredientDetailLoading && selectedIngredient ? (
+              <IngredientDetail
+                ingredient={selectedIngredient}
+                cocktails={ingredientCocktails}
+                onBack={handleCloseIngredientDetail}
+                onViewCocktail={(id) => {
+                  setSelectedIngredient(null);
+                  setIngredientCocktails([]);
+                  setSelectedCocktailId(id);
+                  setActiveTab('cocktails');
+                }}
+              />
+            ) : (
+              <>
+                {isIngredientListLoading ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-3" />
+                    <p>Loading ingredients...</p>
+                  </div>
+                ) : filteredIngredients.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No ingredients found. Try another search.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {filteredIngredients.map(ingredient => (
+                      <IngredientCard
+                        key={ingredient.id}
+                        ingredient={ingredient}
+                        onSelect={loadIngredientDetail}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        
         {/* Party tab */}
         {activeTab === 'party' && (
           <PartyArea
@@ -727,6 +914,7 @@ export default function Index() {
             config={state.config}
             candidateCocktails={shortlistCocktails}
             onSelectCocktail={(id) => setSelectedCocktailId(id)}
+            onSelectIngredient={loadIngredientDetail}
           />
         )}
         
